@@ -41,4 +41,5 @@ card is correct on the first render (no flicker from lazy-loaded built-in module
 
 - `npm ci` – install dev dependencies
 - `npm run check` – type-check the JS sources
+- `npm test` – run the unit tests (node:test, fake `hass` in `test/fixtures.js`)
 - `npm run build` – bundle to `dist/overview-plus.js`
