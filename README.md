@@ -37,12 +37,13 @@ Settings → Dashboards → **Add dashboard** → *Community dashboards* → **O
 
 To configure it, open the dashboard → ✏️ (edit). The visual editor shows:
 
-- **Area layouts:** choose an area, then add sections (title, icon, layout, label). Each section is a
-  collapsible block with buttons to move it up or down or delete it; *Advanced* holds the YAML fields
-  for selections beyond labels, entity filters and the primary entity. Badges and the toggles for
-  remaining devices and automations apply to the selected area. *Reset area to default* removes all
-  customizations of that area.
-- **Card rules** as YAML, and the general options.
+- **Area layouts:** every area with its own layout is a collapsible block showing its sections and a
+  short summary. Inside: badges, the toggles for remaining devices and automations, and the sections
+  as collapsible blocks (title, icon, layout, label; *Advanced* holds YAML fields for selections beyond
+  labels, entity filters and the primary entity) with buttons to move or delete them.
+  *Add area* below the list gives another area its own layout; *Remove area layout* returns an area
+  to the default view.
+- **General**, separated below: card rules (YAML) and the options for the whole dashboard.
 
 You can switch to the full YAML view at any time.
 
