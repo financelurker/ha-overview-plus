@@ -1,0 +1,16 @@
+{
+  "name": "overview-plus",
+  "version": "0.0.0",
+  "description": "Configurable Overview dashboard strategy for Home Assistant",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/overview-plus.js --bundle --format=esm --target=es2022 --outfile=dist/overview-plus.js",
+    "check": "tsc -p jsconfig.json"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}
