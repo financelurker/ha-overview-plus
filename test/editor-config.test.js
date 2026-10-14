@@ -83,3 +83,9 @@ test("areas without an area id are dropped", () => {
   form.areas.push({ sections: [] });
   assert.deepEqual(fromForm(form, {}), {});
 });
+
+test("an area with default options and no sections produces no override", () => {
+  const form = toForm({});
+  form.areas.push({ area: "proxmox", badges: "default", badge_entities: [], show_other_devices: true, show_automations: true, sections: [] });
+  assert.deepEqual(fromForm(form, {}), {});
+});
