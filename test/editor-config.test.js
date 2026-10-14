@@ -46,10 +46,10 @@ test("minimal config round trips without adding keys", () => {
 test("selections become form fields, including exclusions", () => {
   const [, vms, exporter] = toForm(FULL).areas[0].sections;
   assert.deepEqual(vms.m_label, ["virt-guest", "virt-lxc"]);
-  assert.deepEqual([vms.p_domain, vms.p_device_class], ["binary_sensor", "running"]);
+  assert.deepEqual([vms.p_domain, vms.p_device_class], [["binary_sensor"], ["running"]]);
   assert.deepEqual(
     { i: exporter.m_integration, m: exporter.m_manufacturer, n: exporter.m_device_name, x: exporter.m_not_entity_category },
-    { i: ["mqtt"], m: ["Proxmox"], n: "^pve", x: ["config"] }
+    { i: ["mqtt"], m: ["Proxmox"], n: ["^pve"], x: ["config"] }
   );
   assert.deepEqual([exporter.e_include_domains, exporter.e_exclude], [["sensor"], ["sensor.x"]]);
   assert.equal(exporter.m_yaml, undefined);
@@ -60,7 +60,8 @@ test("only constructs a form cannot show fall back to YAML", () => {
   assert.ok(Array.isArray(either.m_yaml), "OR list stays YAML");
   assert.deepEqual(either.p_yaml, { domain: "sensor", not: { device_class: "x" } });
   assert.deepEqual(matchToFields({ entity_label: "x" }), { m_yaml: { entity_label: "x" } });
-  assert.deepEqual(matchToFields({ device_name: ["a", "b"] }), { m_yaml: { device_name: ["a", "b"] } });
+  assert.deepEqual(matchToFields({ device_label: "x" }), { m_yaml: { device_label: "x" } });
+  assert.deepEqual(matchToFields({ not: [{ domain: "a" }] }), { m_yaml: { not: [{ domain: "a" }] } });
 });
 
 test("card rules become form fields", () => {
@@ -127,4 +128,34 @@ test("an area with default options and no sections produces no override", () => 
   const form = toForm({});
   form.areas.push({ area: "proxmox", badges: "default", badge_entities: [], show_other_devices: true, show_automations: true, sections: [] });
   assert.deepEqual(fromForm(form, {}), {});
+});
+
+test("every criterion has a list field, also as exclusion", () => {
+  const match = {
+    label: ["a", "b"], integration: "mqtt", domain: ["sensor"], device_class: "none", entity_category: "diagnostic",
+    manufacturer: "^APC$", model: ["x", "y"], device: ["d1"], device_name: ["^pve", "nas"], entity: "sensor.a",
+    area: "proxmox", floor: ["virtual"],
+    not: { device: "d2", manufacturer: "Foo", device_name: "test", area: "x", floor: "y", label: "l", entity: ["e"] },
+  };
+  const fields = matchToFields(match);
+  assert.equal(fields.m_yaml, undefined);
+  assert.deepEqual(fields.m_device_name, ["^pve", "nas"]);
+  assert.deepEqual(fields.m_not_device, ["d2"]);
+  // one-element lists are stored as single values (same meaning at runtime)
+  const single = (v) => (Array.isArray(v) && v.length === 1 ? v[0] : v);
+  const normalize = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, k === "not" ? normalize(v) : single(v)]));
+  assert.deepEqual(fieldsToMatch(fields), normalize(match));
+});
+
+test("primary entity accepts several domains and device classes", () => {
+  const config = { area_overrides: { p: { sections: [{ layout: "compact", match: { label: "x" }, primary: { domain: ["binary_sensor", "switch"] } }] } } };
+  const form = toForm(config);
+  assert.deepEqual(form.areas[0].sections[0].p_domain, ["binary_sensor", "switch"]);
+  assert.deepEqual(fromForm(form, config), config);
+});
+
+test("a device rule cannot adjust a card: it is stored as replace", () => {
+  const form = toForm({});
+  form.rules.push({ r_action: "adjust", r_scope: "device", r_type: "entities", m_label: ["x"] });
+  assert.deepEqual(fromForm(form, {}).card_rules, [{ match: { label: "x" }, scope: "device", card: { type: "entities" } }]);
 });

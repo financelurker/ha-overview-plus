@@ -247,3 +247,31 @@ test("every field has a label and every option list is filled from the data", as
     assert.deepEqual(missing, [], `missing ${lang} labels`);
   }
 });
+
+test("field types: required fields, device rules without 'adjust', no area fields in sections", async () => {
+  const { collectOptions, ruleSchema, sectionSchema } = await import("../src/editor/schemas.js");
+  const { t } = await import("../src/i18n.js");
+  const hass = makeHass();
+  const ctx = { hass, t: (k, p) => t(hass, k, p) };
+  const opts = collectOptions(hass, (k) => t(hass, k));
+  const flat = (schema) => schema.flatMap((s) => (s.schema ? flat(s.schema) : [s]));
+  const byName = (schema, name) => flat(schema).find((s) => s.name === name);
+
+  const section = sectionSchema(ctx, opts, { layout: "compact" });
+  assert.equal(byName(section, "layout").required, true);
+  for (const name of ["m_area", "m_floor", "m_not_area", "m_not_floor"]) assert.equal(byName(section, name), undefined, name);
+  assert.equal(byName(section, "m_device_name").selector.text.multiple, true);
+  assert.equal(byName(section, "p_domain").selector.select.multiple, true);
+  assert.ok(byName(section, "m_not_device"), "every criterion can be excluded");
+  assert.ok(opts.deviceClasses.some((o) => o.value === "none"));
+
+  const entityRule = ruleSchema(ctx, opts, { r_action: "replace", r_scope: "entity" });
+  assert.equal(byName(entityRule, "r_type").required, true);
+  assert.equal(byName(entityRule, "r_scope").required, true);
+  assert.deepEqual(byName(entityRule, "r_action").selector.select.options.map((o) => o.value), ["replace", "adjust", "hide"]);
+  assert.ok(byName(entityRule, "m_area") && byName(entityRule, "m_not_floor"));
+
+  const deviceRule = ruleSchema(ctx, opts, { r_action: "adjust", r_scope: "device" });
+  assert.deepEqual(byName(deviceRule, "r_action").selector.select.options.map((o) => o.value), ["replace", "hide"]);
+  assert.ok(byName(deviceRule, "r_type"), "adjust is shown as replace for device rules");
+});

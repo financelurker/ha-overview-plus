@@ -92,7 +92,7 @@ const filled = (v) => v !== undefined && v !== null && v !== "" && JSON.stringif
 const sectionShape = (s) => [(s.layout ?? "tiles") === "compact", filled(s.m_yaml), filled(s.e_yaml), filled(s.p_yaml)].join();
 
 /** Things that change which fields a rule form shows. @param {any} r */
-const ruleShape = (r) => [r.r_action || "replace", filled(r.m_yaml)].join();
+const ruleShape = (r) => [r.r_action || "replace", r.r_scope || "entity", filled(r.m_yaml)].join();
 
 /** @param {string} area */
 const newAreaEntry = (area) => ({
@@ -319,7 +319,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const root = /** @type {ShadowRoot} */ (this.shadowRoot);
     if (!this._hass || !root) return;
     root.innerHTML = "";
-    this._opts = collectOptions(this._hass);
+    this._opts = collectOptions(this._hass, (k) => this._t(k));
     const style = document.createElement("style");
     style.textContent = STYLE;
     root.appendChild(style);
@@ -502,7 +502,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _optionsSchema(entry) {
     const badgeOptions = ["default", "none", "custom"].map((value) => ({ value, label: this._t(`editor_badges_${value}`) }));
     return [
-      { name: "badges", selector: { select: { mode: "dropdown", options: badgeOptions } } },
+      { name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } },
       ...(entry.badges === "custom" ? [{ name: "badge_entities", selector: { entity: { multiple: true } } }] : []),
       { name: "", type: "grid", schema: [
         { name: "show_other_devices", selector: { boolean: {} } },

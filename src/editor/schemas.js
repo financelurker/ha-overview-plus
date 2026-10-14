@@ -45,8 +45,9 @@ const options = (values, label = (v) => v) =>
 /**
  * Lists of values that occur in this installation.
  * @param {any} hass
+ * @param {(key: string) => string} [t]
  */
-export function collectOptions(hass) {
+export function collectOptions(hass, t = (/** @type {string} */ k) => k) {
   const states = Object.values(hass.states || {});
   const entities = Object.values(hass.entities || {});
   const devices = Object.values(hass.devices || {});
@@ -63,7 +64,10 @@ export function collectOptions(hass) {
   return {
     integrations: options(entities.map((/** @type {any} */ e) => e.platform), integrationName),
     domains: options(states.map((/** @type {any} */ s) => domainOf(s.entity_id))),
-    deviceClasses: options(states.map((/** @type {any} */ s) => s.attributes?.device_class)),
+    deviceClasses: [
+      { value: "none", label: t("editor_device_class_none") },
+      ...options(states.map((/** @type {any} */ s) => s.attributes?.device_class)),
+    ],
     manufacturers: exact("manufacturer"),
     models: exact("model"),
     cardTypes: [
@@ -94,42 +98,34 @@ const categoryOptions = (ctx) => CATEGORIES.map((value) => ({ value, label: ctx.
  */
 export function matchSchema(ctx, opts, data, include = {}) {
   if (has(data.m_yaml)) return [{ name: "m_yaml", selector: { object: {} } }];
-  return [
-    ...(include.label ? [{ name: "m_label", selector: { label: { multiple: true } } }] : []),
+  const categories = { select: { mode: "dropdown", multiple: true, options: categoryOptions(ctx) } };
+  /** The same criteria for selection (m_) and exclusion (m_not_). @param {string} p */
+  const criteria = (p) => [
+    { name: `${p}label`, selector: { label: { multiple: true } } },
     { name: "", type: "grid", schema: [
-      { name: "m_integration", selector: pick(opts.integrations) },
-      { name: "m_domain", selector: pick(opts.domains) },
+      { name: `${p}integration`, selector: pick(opts.integrations) },
+      { name: `${p}domain`, selector: pick(opts.domains) },
     ] },
     { name: "", type: "grid", schema: [
-      { name: "m_device_class", selector: pick(opts.deviceClasses) },
-      { name: "m_entity_category", selector: { select: { mode: "dropdown", multiple: true, options: categoryOptions(ctx) } } },
+      { name: `${p}device_class`, selector: pick(opts.deviceClasses) },
+      { name: `${p}entity_category`, selector: categories },
     ] },
     { name: "", type: "grid", schema: [
-      { name: "m_manufacturer", selector: pick(opts.manufacturers) },
-      { name: "m_model", selector: pick(opts.models) },
+      { name: `${p}manufacturer`, selector: pick(opts.manufacturers) },
+      { name: `${p}model`, selector: pick(opts.models) },
     ] },
-    { name: "m_device_name", selector: { text: {} } },
-    { name: "m_device", selector: { device: { multiple: true } } },
-    { name: "m_entity", selector: { entity: { multiple: true } } },
+    { name: `${p}device_name`, selector: { text: { multiple: true } } },
+    { name: `${p}device`, selector: { device: { multiple: true } } },
+    { name: `${p}entity`, selector: { entity: { multiple: true } } },
     ...(include.area ? [{ name: "", type: "grid", schema: [
-      { name: "m_area", selector: { area: { multiple: true } } },
-      { name: "m_floor", selector: { floor: { multiple: true } } },
+      { name: `${p}area`, selector: { area: { multiple: true } } },
+      { name: `${p}floor`, selector: { floor: { multiple: true } } },
     ] }] : []),
-    {
-      name: "", type: "expandable", flatten: true, title: ctx.t("editor_exclude"),
-      schema: [
-        { name: "m_not_label", selector: { label: { multiple: true } } },
-        { name: "", type: "grid", schema: [
-          { name: "m_not_integration", selector: pick(opts.integrations) },
-          { name: "m_not_domain", selector: pick(opts.domains) },
-        ] },
-        { name: "", type: "grid", schema: [
-          { name: "m_not_device_class", selector: pick(opts.deviceClasses) },
-          { name: "m_not_entity_category", selector: { select: { mode: "dropdown", multiple: true, options: categoryOptions(ctx) } } },
-        ] },
-        { name: "m_not_entity", selector: { entity: { multiple: true } } },
-      ],
-    },
+  ];
+  const positive = criteria("m_").filter((s) => include.label || s.name !== "m_label");
+  return [
+    ...positive,
+    { name: "", type: "expandable", flatten: true, title: ctx.t("editor_exclude"), schema: criteria("m_not_") },
   ];
 }
 
@@ -146,7 +142,7 @@ export function sectionSchema(ctx, opts, section) {
       { name: "title", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
     ] },
-    { name: "layout", selector: { select: { mode: "dropdown", options: layoutOptions } } },
+    { name: "layout", required: true, selector: { select: { mode: "dropdown", options: layoutOptions } } },
     ...(has(section.m_yaml) ? [] : [{ name: "m_label", selector: { label: { multiple: true } } }]),
     {
       name: "", type: "expandable", flatten: true, title: ctx.t("editor_refine"),
@@ -173,8 +169,8 @@ export function sectionSchema(ctx, opts, section) {
       schema: has(section.p_yaml)
         ? [{ name: "p_yaml", selector: { object: {} } }]
         : [{ name: "", type: "grid", schema: [
-            { name: "p_domain", selector: pick(opts.domains, false) },
-            { name: "p_device_class", selector: pick(opts.deviceClasses, false) },
+            { name: "p_domain", selector: pick(opts.domains) },
+            { name: "p_device_class", selector: pick(opts.deviceClasses) },
           ] }],
     }] : []),
   ];
@@ -186,12 +182,15 @@ export function sectionSchema(ctx, opts, section) {
  * @param {Record<string, any>} rule
  */
 export function ruleSchema(ctx, opts, rule) {
-  const action = rule.r_action || "replace";
+  const device = rule.r_scope === "device";
+  // A device card replaces all entity cards of a device: it cannot "adjust" one of them
+  const action = device && rule.r_action === "adjust" ? "replace" : rule.r_action || "replace";
   /** @param {string[]} values @param {string} prefix */
   const choice = (values, prefix) => values.map((value) => ({ value, label: ctx.t(`${prefix}${value}`) }));
+  const actions = device ? ["replace", "hide"] : ["replace", "adjust", "hide"];
   return [
-    { name: "r_action", selector: { select: { mode: "dropdown", options: choice(["replace", "adjust", "hide"], "editor_action_") } } },
-    ...(action === "replace" ? [{ name: "r_type", selector: pick(opts.cardTypes, false) }] : []),
+    { name: "r_action", required: true, selector: { select: { mode: "dropdown", options: choice(actions, "editor_action_") } } },
+    ...(action === "replace" ? [{ name: "r_type", required: true, selector: pick(opts.cardTypes, false) }] : []),
     ...(action !== "hide" ? [
       { name: "", type: "grid", schema: [
         { name: "r_name", selector: { text: {} } },
@@ -204,7 +203,7 @@ export function ruleSchema(ctx, opts, rule) {
     { name: "", type: "expandable", flatten: true, expanded: true, title: ctx.t("editor_applies_to"),
       schema: matchSchema(ctx, opts, rule, { label: true, area: true }) },
     { name: "", type: "expandable", flatten: true, title: ctx.t("editor_rule_scope"), schema: [
-      { name: "r_scope", selector: { select: { mode: "dropdown", options: choice(["entity", "device"], "editor_scope_") } } },
+      { name: "r_scope", required: true, selector: { select: { mode: "dropdown", options: choice(["entity", "device"], "editor_scope_") } } },
       { name: "r_contexts", selector: { select: { mode: "dropdown", multiple: true, options: choice(["area", "area_other"], "editor_context_") } } },
       { name: "r_stop", selector: { boolean: {} } },
     ] },
@@ -232,12 +231,11 @@ export function matchSummary(ctx, data) {
   const keys = [
     ["m_label", label], ["m_integration", (v) => v], ["m_domain", (v) => v], ["m_device_class", (v) => v],
     ["m_manufacturer", pattern], ["m_model", pattern], ["m_device", device], ["m_entity", entity],
-    ["m_area", (id) => ctx.hass.areas?.[id]?.name || id],
+    ["m_area", (id) => ctx.hass.areas?.[id]?.name || id], ["m_device_name", (v) => v],
   ];
   for (const [key, fmt] of keys) {
     const values = data[key];
     if (Array.isArray(values) && values.length) parts.push(values.map(fmt).join(", "));
   }
-  if (data.m_device_name) parts.push(data.m_device_name);
   return parts.join(" · ");
 }

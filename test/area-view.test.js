@@ -169,3 +169,11 @@ test("area override: a section without selection matches nothing", () => {
   });
   assert.deepEqual(headings(view), ["VMs", "", "pve1", "pve exporter", "UPS"]);
 });
+
+test("a device rule without card type is ignored instead of producing a broken card", () => {
+  const { view } = generateAreaView(makeHass(), "living_room", {
+    card_rules: [{ scope: "device", match: { device: "dev_plug" }, card: { name: "x" } }],
+  });
+  const section = view.sections.find((s) => s.cards[0].heading === "Coffee machine");
+  assert.equal(section.cards[1].type, "tile");
+});
