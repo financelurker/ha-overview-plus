@@ -36,7 +36,9 @@ const STYLE = `
   .block { margin-bottom: 24px; }
   .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 8px; }
   .hint { color: var(--secondary-text-color); margin: 8px 0 16px; }
-  .sections { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 8px; }
+  .areas { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+  .general { border-top: 1px solid var(--divider-color); padding-top: 16px; }
+  .sections { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 8px; padding-left: 8px; }
   .panel-body { padding: 0 16px 8px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
@@ -94,10 +96,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._config = {};
     /** @type {Record<string, any>} */
     this._form = toForm({});
-    /** @type {string | undefined} */
-    this._area = undefined;
-    /** @type {Set<number>} indexes of expanded section blocks */
-    this._expanded = new Set();
+    /** @type {Set<string>} area ids whose block is expanded */
+    this._openAreas = new Set();
+    /** @type {Map<string, Set<number>>} per area: indexes of expanded section blocks */
+    this._openSections = new Map();
     /** @type {string | undefined} config last sent to Home Assistant */
     this._lastEmitted = undefined;
     /** @type {Record<string, HTMLElement>} */
@@ -127,10 +129,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     }
     this._config = config;
     this._form = toForm(config);
-    if (!this._area || !this._form.areas.some((/** @type {any} */ a) => a.area === this._area)) {
-      this._area = this._form.areas[0]?.area;
-    }
-    this._expanded = new Set();
+    // Keep the open/closed state of areas that still exist; open the only area by default
+    const ids = new Set(this._form.areas.map((/** @type {any} */ a) => a.area));
+    this._openAreas = new Set([...this._openAreas].filter((id) => ids.has(id)));
+    if (ids.size === 1) this._openAreas.add([...ids][0]);
+    this._openSections = new Map();
     this._renderAll();
   }
 
@@ -266,24 +269,25 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   // -------------------------------------------------------------- state & emit
 
-  _entry() {
-    return this._form.areas.find((/** @type {any} */ a) => a.area === this._area);
-  }
-
-  _ensureEntry() {
-    let entry = this._entry();
-    if (!entry && this._area) {
-      entry = newAreaEntry(this._area);
-      this._form.areas.push(entry);
-    }
-    return entry;
-  }
-
   _emit() {
     const config = fromForm(this._form, this._config);
     this._config = config;
     this._lastEmitted = JSON.stringify(config);
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
+  }
+
+  /** @param {string} areaId */
+  _areaName(areaId) {
+    const area = this._hass.areas?.[areaId];
+    if (!area) return areaId;
+    const floor = area.floor_id ? this._hass.floors?.[area.floor_id]?.name : undefined;
+    return floor ? `${floor} › ${area.name}` : area.name;
+  }
+
+  /** @param {string} areaId */
+  _sectionState(areaId) {
+    if (!this._openSections.has(areaId)) this._openSections.set(areaId, new Set());
+    return /** @type {Set<number>} */ (this._openSections.get(areaId));
   }
 
   // ------------------------------------------------------------------- render
@@ -296,48 +300,55 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     style.textContent = STYLE;
     root.appendChild(style);
 
-    // Area layouts
+    // ---- Area layouts: one block per customized area
     const areaBlock = document.createElement("div");
     areaBlock.className = "block";
-    const heading = document.createElement("div");
-    heading.className = "heading";
-    heading.textContent = this._t("editor_areas");
-    const hint = document.createElement("div");
-    hint.className = "hint";
-    hint.textContent = this._t("editor_areas_help");
-    this._parts.areaPicker = this._haForm(this._areaPickerSchema(), { area: this._area }, (v) => {
-      this._area = v.area || undefined;
-      this._expanded = new Set();
-      this._renderArea();
-    });
-    this._parts.area = document.createElement("div");
-    areaBlock.append(heading, hint, this._parts.areaPicker, this._parts.area);
+    areaBlock.append(this._heading("editor_areas"), this._hint("editor_areas_help"));
+    this._parts.areas = document.createElement("div");
+    this._parts.areas.className = "areas";
+    this._parts.addArea = document.createElement("div");
+    this._parts.addArea.className = "add-area";
+    areaBlock.append(this._parts.areas, this._parts.addArea);
 
-    // Card rules and general options
-    const rulesBlock = document.createElement("div");
-    rulesBlock.className = "block";
-    this._parts.rules = this._haForm(
-      [{ name: "card_rules", selector: { object: {} } }],
-      { card_rules: this._form.card_rules },
-      (v) => { this._form.card_rules = v.card_rules; this._emit(); }
-    );
-    rulesBlock.append(this._parts.rules);
-
+    // ---- General: card rules and options for the whole dashboard
     const generalBlock = document.createElement("div");
-    generalBlock.className = "block";
-    this._parts.general = this._haForm(
-      [{ name: "", type: "grid", schema: [
-        { name: "load_home_settings", selector: { boolean: {} } },
-        { name: "debug", selector: { boolean: {} } },
-      ] }],
-      { load_home_settings: this._form.load_home_settings, debug: this._form.debug },
-      (v) => { this._form.load_home_settings = v.load_home_settings; this._form.debug = v.debug; this._emit(); }
+    generalBlock.className = "block general";
+    generalBlock.append(this._heading("editor_general"));
+    generalBlock.append(
+      this._haForm(
+        [{ name: "card_rules", selector: { object: {} } }],
+        { card_rules: this._form.card_rules },
+        (v) => { this._form.card_rules = v.card_rules; this._emit(); }
+      ),
+      this._haForm(
+        [{ name: "", type: "grid", schema: [
+          { name: "load_home_settings", selector: { boolean: {} } },
+          { name: "debug", selector: { boolean: {} } },
+        ] }],
+        { load_home_settings: this._form.load_home_settings, debug: this._form.debug },
+        (v) => { this._form.load_home_settings = v.load_home_settings; this._form.debug = v.debug; this._emit(); }
+      )
     );
-    generalBlock.append(this._parts.general);
 
-    root.append(areaBlock, rulesBlock, generalBlock);
+    root.append(areaBlock, generalBlock);
     this._built = true;
-    this._renderArea();
+    this._renderAreas();
+  }
+
+  /** @param {string} key */
+  _heading(key) {
+    const el = document.createElement("div");
+    el.className = "heading";
+    el.textContent = this._t(key);
+    return el;
+  }
+
+  /** @param {string} key */
+  _hint(key) {
+    const el = document.createElement("div");
+    el.className = "hint";
+    el.textContent = this._t(key);
+    return el;
   }
 
   _updateHass() {
@@ -345,75 +356,90 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     root.querySelectorAll("ha-form").forEach((form) => { /** @type {any} */ (form).hass = this._hass; });
   }
 
-  _areaPickerSchema() {
-    const customized = new Set(Object.keys(fromForm(this._form, {}).area_overrides || {}));
-    const floors = this._hass.floors || {};
-    const options = Object.values(this._hass.areas || {})
-      .map((/** @type {any} */ area) => {
-        const floor = area.floor_id ? floors[area.floor_id]?.name : undefined;
-        const name = floor ? `${floor} › ${area.name}` : area.name;
-        return {
-          value: area.area_id,
-          label: customized.has(area.area_id) ? `${name} – ${this._t("editor_customized")}` : name,
-        };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-    return [{ name: "area", selector: { select: { mode: "dropdown", options } } }];
-  }
-
-  _refreshAreaPicker() {
-    const picker = /** @type {any} */ (this._parts.areaPicker);
-    picker.schema = this._areaPickerSchema();
-  }
-
-  _renderArea() {
-    const container = this._parts.area;
+  _renderAreas() {
+    const container = this._parts.areas;
     container.innerHTML = "";
-    if (!this._area) {
-      const hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = this._t("editor_no_area");
-      container.appendChild(hint);
-      return;
-    }
-    const entry = this._entry() ?? newAreaEntry(this._area);
+    if (!this._form.areas.length) container.append(this._hint("editor_no_area"));
+    for (const entry of this._form.areas) container.appendChild(this._renderAreaPanel(entry));
+    this._renderAddArea();
+  }
 
-    // Area options
-    this._parts.options = this._haForm(this._optionsSchema(entry), this._optionsData(entry), (v) => {
-      const e = this._ensureEntry();
-      const badgesChanged = v.badges !== e.badges;
-      Object.assign(e, v);
-      if (badgesChanged) /** @type {any} */ (this._parts.options).schema = this._optionsSchema(e);
+  /** "Add area": picker with the areas that have no layout yet. */
+  _renderAddArea() {
+    const container = this._parts.addArea;
+    container.innerHTML = "";
+    const used = new Set(this._form.areas.map((/** @type {any} */ a) => a.area));
+    const options = Object.keys(this._hass.areas || {})
+      .filter((id) => !used.has(id))
+      .map((id) => ({ value: id, label: this._areaName(id) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (!options.length) return;
+    container.append(
+      this._haForm(
+        [{ name: "add_area", selector: { select: { mode: "dropdown", options } } }],
+        {},
+        (v) => {
+          if (!v.add_area) return;
+          this._form.areas.push(newAreaEntry(v.add_area));
+          this._openAreas.add(v.add_area);
+          this._renderAreas();
+          // nothing to emit yet: an area without sections and with default options has no override
+        }
+      )
+    );
+  }
+
+  /** @param {any} entry */
+  _areaSummary(entry) {
+    const n = entry.sections.length;
+    const parts = [this._t(n === 1 ? "editor_one_section" : "editor_n_sections", { n: String(n) })];
+    if (entry.badges !== "default") parts.push(`${this._t("editor_badges")}: ${this._t(`editor_badges_${entry.badges}`)}`);
+    return parts.join(" · ");
+  }
+
+  /** @param {any} entry */
+  _renderAreaPanel(entry) {
+    const panel = this._panel(this._areaName(entry.area), this._areaSummary(entry), this._openAreas.has(entry.area), (open) => {
+      if (open) this._openAreas.add(entry.area);
+      else this._openAreas.delete(entry.area);
+    });
+    panel.root.classList.add("area-panel");
+    const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
+
+    const options = this._haForm(this._optionsSchema(entry), this._optionsData(entry), (v) => {
+      const badgesChanged = v.badges !== entry.badges;
+      Object.assign(entry, v);
+      if (badgesChanged) options.schema = this._optionsSchema(entry);
+      refreshHeader();
       this._emit();
-      this._refreshAreaPicker();
     });
 
-    // Sections
-    this._parts.sections = document.createElement("div");
-    this._parts.sections.className = "sections";
+    const sections = document.createElement("div");
+    sections.className = "sections";
+    const renderSections = () => this._renderSections(entry, sections, refreshHeader);
 
     const actions = document.createElement("div");
     actions.className = "row left";
     actions.append(
       this._button(this._t("editor_add_section"), () => {
-        const e = this._ensureEntry();
-        e.sections.push({ title: "", layout: "tiles", labels: [] });
-        this._expanded.add(e.sections.length - 1);
-        this._renderSections();
+        entry.sections.push({ title: "", layout: "tiles", labels: [] });
+        this._sectionState(entry.area).add(entry.sections.length - 1);
+        renderSections();
+        refreshHeader();
         this._emit();
-        this._refreshAreaPicker();
       }),
-      this._button(this._t("editor_reset_area"), () => {
-        this._form.areas = this._form.areas.filter((/** @type {any} */ a) => a.area !== this._area);
-        this._expanded = new Set();
+      this._button(this._t("editor_remove_area"), () => {
+        this._form.areas = this._form.areas.filter((/** @type {any} */ a) => a !== entry);
+        this._openAreas.delete(entry.area);
+        this._openSections.delete(entry.area);
+        this._renderAreas();
         this._emit();
-        this._refreshAreaPicker();
-        this._renderArea();
       }, "plain")
     );
 
-    container.append(this._parts.options, this._parts.sections, actions);
-    this._renderSections();
+    panel.body.append(options, sections, actions);
+    renderSections();
+    return panel.root;
   }
 
   /** @param {any} entry */
@@ -471,21 +497,24 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return { header, secondary };
   }
 
-  _renderSections() {
-    const container = this._parts.sections;
+  /**
+   * @param {any} entry
+   * @param {HTMLElement} container
+   * @param {() => void} refreshAreaHeader
+   */
+  _renderSections(entry, container, refreshAreaHeader) {
     container.innerHTML = "";
-    const entry = this._entry();
-    const sections = entry?.sections ?? [];
-    sections.forEach((/** @type {any} */ section, /** @type {number} */ index) => {
+    const open = this._sectionState(entry.area);
+    const rerender = () => this._renderSections(entry, container, refreshAreaHeader);
+    entry.sections.forEach((/** @type {any} */ section, /** @type {number} */ index) => {
       const { header, secondary } = this._sectionHeader(section, index);
-      const panel = this._panel(header, secondary, this._expanded.has(index), (open) => {
-        if (open) this._expanded.add(index);
-        else this._expanded.delete(index);
+      const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
+        if (isOpen) open.add(index);
+        else open.delete(index);
       });
 
       const form = this._haForm(this._sectionSchema(section), clone(section), (v) => {
         const layoutChanged = (v.layout ?? "tiles") !== (section.layout ?? "tiles");
-        // Replace the section's content but keep the object identity in the list
         for (const key of Object.keys(section)) delete section[key];
         Object.assign(section, v);
         if (layoutChanged) form.schema = this._sectionSchema(section);
@@ -497,40 +526,42 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const row = document.createElement("div");
       row.className = "row";
       row.append(
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(index, -1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(index, 1), index === sections.length - 1),
-        this._iconButton(ICON.delete, this._t("editor_delete_section"), () => this._delete(index))
+        this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(entry, index, -1, rerender), index === 0),
+        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1),
+        this._iconButton(ICON.delete, this._t("editor_delete_section"), () => {
+          entry.sections.splice(index, 1);
+          const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          this._openSections.set(entry.area, next);
+          rerender();
+          refreshAreaHeader();
+          this._emit();
+        })
       );
       panel.body.append(form, row);
       container.appendChild(panel.root);
     });
   }
 
-  /** @param {number} index @param {number} delta */
-  _move(index, delta) {
-    const sections = this._entry()?.sections;
+  /**
+   * @param {any} entry
+   * @param {number} index
+   * @param {number} delta
+   * @param {() => void} rerender
+   */
+  _move(entry, index, delta, rerender) {
+    const sections = entry.sections;
     const target = index + delta;
-    if (!sections || target < 0 || target >= sections.length) return;
+    if (target < 0 || target >= sections.length) return;
     [sections[index], sections[target]] = [sections[target], sections[index]];
-    const wasOpen = this._expanded.has(index);
-    const otherOpen = this._expanded.has(target);
-    this._expanded.delete(index);
-    this._expanded.delete(target);
-    if (wasOpen) this._expanded.add(target);
-    if (otherOpen) this._expanded.add(index);
-    this._renderSections();
+    const open = this._sectionState(entry.area);
+    const a = open.has(index);
+    const b = open.has(target);
+    open.delete(index);
+    open.delete(target);
+    if (a) open.add(target);
+    if (b) open.add(index);
+    rerender();
     this._emit();
-  }
-
-  /** @param {number} index */
-  _delete(index) {
-    const sections = this._entry()?.sections;
-    if (!sections) return;
-    sections.splice(index, 1);
-    this._expanded = new Set([...this._expanded].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-    this._renderSections();
-    this._emit();
-    this._refreshAreaPicker();
   }
 }
 

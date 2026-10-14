@@ -1,6 +1,7 @@
 // Interaction tests for the visual editor in a simulated browser (happy-dom).
 // ha-form is replaced by a stub that stores its properties; tests "edit" a form by
-// dispatching value-changed like the real ha-form does.
+// dispatching value-changed like the real ha-form does. ha-expansion-panel and
+// ha-button are not defined, so the editor uses its plain HTML fallbacks.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
@@ -19,57 +20,93 @@ function setup(config) {
   document.body.appendChild(editor);
   const events = [];
   editor.addEventListener("config-changed", (ev) => events.push(ev.detail.config));
-  editor.hass = makeHass({ floors: { ground: { floor_id: "ground", name: "Ground" }, virtual: { floor_id: "virtual", name: "Virtual" } } });
+  editor.hass = makeHass({
+    floors: { ground: { floor_id: "ground", name: "Ground" }, virtual: { floor_id: "virtual", name: "Virtual" } },
+    labels: { "virt-guest": { label_id: "virt-guest", name: "VM" } },
+  });
   editor.setConfig(config);
   return { editor, events, last: () => events.at(-1) };
 }
 
-const forms = (editor) => [...editor.shadowRoot.querySelectorAll("ha-form")];
+const root = (editor) => editor.shadowRoot;
+const forms = (scope) => [...scope.querySelectorAll("ha-form")];
 const fieldNames = (schema) => schema.flatMap((s) => (s.schema ? fieldNames(s.schema) : [s.name]));
-const formWith = (editor, name) => forms(editor).find((f) => fieldNames(f.schema).includes(name));
-const sectionForms = (editor) => forms(editor).filter((f) => fieldNames(f.schema).includes("layout"));
+const formWith = (scope, name) => forms(scope).find((f) => fieldNames(f.schema).includes(name));
+const sectionForms = (scope) => forms(scope).filter((f) => fieldNames(f.schema).includes("layout"));
 const edit = (form, patch) =>
   form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { ...form.data, ...patch } } }));
-const buttons = (editor, text) => [...editor.shadowRoot.querySelectorAll("button")].filter((b) => b.textContent === text);
+const buttons = (scope, text) => [...scope.querySelectorAll("button")].filter((b) => b.textContent === text);
 const click = (el) => el.dispatchEvent(new Event("click"));
+/** Area blocks (fallback <details>) with their summary text. */
+const areaPanels = (editor) => [...root(editor).querySelectorAll("details.area-panel")];
+const summary = (panel) => panel.querySelector(":scope > summary").textContent;
+const areaPanel = (editor, name) => areaPanels(editor).find((p) => summary(p).startsWith(name));
 
-test("without overrides no area is selected and the picker lists areas by floor", () => {
-  const { editor } = setup({ type: "custom:overview-plus" });
-  const picker = formWith(editor, "area");
-  assert.equal(picker.data.area, undefined);
-  const labels = picker.schema[0].selector.select.options.map((o) => o.label);
-  assert.deepEqual(labels, ["Empty", "Ground › Living room", "Virtual › Proxmox"]);
-  assert.equal(sectionForms(editor).length, 0);
+const TWO_AREAS = {
+  type: "custom:overview-plus",
+  area_overrides: {
+    proxmox: { badges: false, sections: [{ title: "Disks", layout: "devices", match: { label: "harddisk" } }] },
+    living_room: { sections: [{ title: "A", match: { label: "a" } }, { title: "B", match: { label: "b" } }] },
+  },
+};
+
+test("every customized area is its own block with a summary; general options separate", () => {
+  const { editor } = setup(TWO_AREAS);
+  assert.deepEqual(areaPanels(editor).map(summary), [
+    "Virtual › Proxmox1 section · Badges: None",
+    "Ground › Living room2 sections",
+  ]);
+  assert.deepEqual(sectionForms(areaPanel(editor, "Virtual › Proxmox")).map((f) => f.data.title), ["Disks"]);
+  assert.deepEqual(sectionForms(areaPanel(editor, "Ground › Living room")).map((f) => f.data.title), ["A", "B"]);
+  const general = root(editor).querySelector(".general");
+  assert.ok(formWith(general, "card_rules"));
+  assert.ok(formWith(general, "debug"));
+  assert.ok(!areaPanels(editor).some((p) => formWith(p, "card_rules")));
 });
 
-test("add a section with labels for an area", () => {
-  const { editor, last } = setup({ type: "custom:overview-plus", favorite_entities: ["light.lamp"] });
-  edit(formWith(editor, "area"), { area: "proxmox" });
-  click(buttons(editor, "Add section")[0]);
-  assert.deepEqual(last().area_overrides, { proxmox: { sections: [{ layout: "tiles" }] } }, "new section is a placeholder");
-  const [section] = sectionForms(editor);
-  edit(section, { title: "VMs", layout: "compact", labels: ["virt-guest"] });
+test("'add area' offers only areas without a layout", () => {
+  const { editor } = setup(TWO_AREAS);
+  const add = formWith(root(editor), "add_area");
+  assert.deepEqual(add.schema[0].selector.select.options.map((o) => o.label), ["Empty"]);
+});
+
+test("add an area, then a section with labels (consecutive edits are kept)", () => {
+  const { editor, last, events } = setup({ type: "custom:overview-plus", favorite_entities: ["light.lamp"] });
+  edit(formWith(root(editor), "add_area"), { add_area: "proxmox" });
+  assert.equal(events.length, 0, "an empty area layout changes nothing yet");
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  assert.ok(panel.open, "a new area block is expanded");
+  click(buttons(panel, "Add section")[0]);
+  const [section] = sectionForms(panel);
+  edit(section, { title: "VMs" });
+  edit(section, { layout: "compact" });
+  edit(section, { labels: ["virt-guest"] });
   assert.deepEqual(last(), {
     type: "custom:overview-plus",
     favorite_entities: ["light.lamp"],
     area_overrides: { proxmox: { sections: [{ title: "VMs", layout: "compact", match: { label: "virt-guest" } }] } },
   });
-  // the picker marks the area as customized
-  const options = formWith(editor, "area").schema[0].selector.select.options;
-  assert.match(options.find((o) => o.value === "proxmox").label, /customized/);
+  assert.equal(summary(panel), "Virtual › Proxmox1 section");
+  const sectionSummary = panel.querySelector(".sections details > summary").textContent;
+  assert.equal(sectionSummary, "VMsCompact (one tile per device) · VM");
 });
 
-test("primary entity field only for the compact layout", () => {
-  const { editor } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "x" } }] } } });
-  const [section] = sectionForms(editor);
+test("changes in one area do not touch the other", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  edit(sectionForms(areaPanel(editor, "Ground › Living room"))[1], { title: "B2" });
+  assert.deepEqual(last().area_overrides.proxmox, TWO_AREAS.area_overrides.proxmox);
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.title), ["A", "B2"]);
+});
+
+test("conditional fields: primary only for compact, badge entities only for selected entities", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const [section] = sectionForms(panel);
   assert.ok(!fieldNames(section.schema).includes("primary"));
   edit(section, { layout: "compact" });
   assert.ok(fieldNames(section.schema).includes("primary"));
-});
 
-test("badge entities only when 'selected entities' is chosen", () => {
-  const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "x" } }] } } });
-  const options = formWith(editor, "badges");
+  const options = formWith(panel, "badges");
   assert.ok(!fieldNames(options.schema).includes("badge_entities"));
   edit(options, { badges: "custom" });
   assert.ok(fieldNames(options.schema).includes("badge_entities"));
@@ -77,7 +114,7 @@ test("badge entities only when 'selected entities' is chosen", () => {
   assert.deepEqual(last().area_overrides.proxmox.badges, ["sensor.pve_cpu"]);
 });
 
-test("move and delete sections", () => {
+test("move and delete sections within an area", () => {
   const { editor, last } = setup({
     type: "custom:overview-plus",
     area_overrides: { proxmox: { sections: [
@@ -86,32 +123,43 @@ test("move and delete sections", () => {
       { title: "C", match: { label: "c" } },
     ] } },
   });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
   const titles = () => last().area_overrides.proxmox.sections.map((s) => s.title);
-  click(buttons(editor, "Move down")[0]);
+  click(buttons(panel, "Move down")[0]);
   assert.deepEqual(titles(), ["B", "A", "C"]);
-  click(buttons(editor, "Delete section")[2]);
+  click(buttons(panel, "Delete section")[2]);
   assert.deepEqual(titles(), ["B", "A"]);
-  // first "Move up" is disabled
-  assert.equal(buttons(editor, "Move up")[0].disabled, true);
+  assert.equal(buttons(panel, "Move up")[0].disabled, true);
+  assert.equal(summary(panel), "Virtual › Proxmox2 sections");
 });
 
-test("reset area removes its override", () => {
-  const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { badges: false } } });
-  click(buttons(editor, "Reset area to default")[0]);
-  assert.deepEqual(last(), { type: "custom:overview-plus" });
+test("remove an area layout", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  click(buttons(areaPanel(editor, "Virtual › Proxmox"), "Remove area layout")[0]);
+  assert.deepEqual(Object.keys(last().area_overrides), ["living_room"]);
+  assert.equal(areaPanels(editor).length, 1);
+  const options = formWith(root(editor), "add_area").schema[0].selector.select.options.map((o) => o.value);
+  assert.ok(options.includes("proxmox"));
 });
 
 test("our own change echoed back by Home Assistant does not re-render (focus is kept)", () => {
-  const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
-  const [before] = sectionForms(editor);
-  edit(before, { title: "AB" });
+  const { editor, last } = setup(TWO_AREAS);
+  const [before] = sectionForms(areaPanel(editor, "Virtual › Proxmox"));
+  edit(before, { title: "Disks2" });
   editor.setConfig(last());
-  const [after] = sectionForms(editor);
-  assert.equal(after, before);
-  // an external change does re-render
-  editor.setConfig({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "X", match: { label: "a" } }] } } });
-  assert.notEqual(sectionForms(editor)[0], before);
-  assert.equal(sectionForms(editor)[0].data.title, "X");
+  assert.equal(sectionForms(areaPanel(editor, "Virtual › Proxmox"))[0], before);
+  editor.setConfig(TWO_AREAS);
+  assert.notEqual(sectionForms(areaPanel(editor, "Virtual › Proxmox"))[0], before);
+});
+
+test("open/closed state survives an external re-render", () => {
+  const { editor } = setup(TWO_AREAS);
+  const living = areaPanel(editor, "Ground › Living room");
+  assert.equal(living.open, false);
+  living.open = true;
+  living.dispatchEvent(new Event("toggle"));
+  editor.setConfig({ ...TWO_AREAS, debug: true });
+  assert.equal(areaPanel(editor, "Ground › Living room").open, true);
 });
 
 test("unknown options and advanced selections survive editing", () => {
@@ -121,22 +169,9 @@ test("unknown options and advanced selections survive editing", () => {
     area_overrides: { proxmox: { future: 1, sections: [{ title: "E", match: { integration: "mqtt" }, entities: { include_domains: ["sensor"] } }] } },
   };
   const { editor, last } = setup(config);
-  edit(sectionForms(editor)[0], { title: "Exporter" });
+  edit(sectionForms(root(editor))[0], { title: "Exporter" });
   assert.deepEqual(last(), {
     ...config,
     area_overrides: { proxmox: { future: 1, sections: [{ title: "Exporter", match: { integration: "mqtt" }, entities: { include_domains: ["sensor"] } }] } },
   });
-});
-
-test("consecutive edits of different fields are all kept", () => {
-  const { editor, last } = setup({ type: "custom:overview-plus" });
-  edit(formWith(editor, "area"), { area: "proxmox" });
-  click(buttons(editor, "Add section")[0]);
-  const [section] = sectionForms(editor);
-  edit(section, { title: "VMs" });
-  edit(section, { icon: "mdi:server" });
-  edit(section, { labels: ["virt-guest"] });
-  assert.deepEqual(last().area_overrides.proxmox.sections, [
-    { title: "VMs", layout: "tiles", icon: "mdi:server", match: { label: "virt-guest" } },
-  ]);
 });
