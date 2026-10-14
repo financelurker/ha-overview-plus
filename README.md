@@ -34,7 +34,16 @@ no flicker from swapping cards after the built-in dashboard has loaded.
 ## Usage
 
 Settings → Dashboards → **Add dashboard** → *Community dashboards* → **Overview Plus**.
-To configure it, open the dashboard → ✏️ (edit) and change the YAML, or create it manually with:
+
+To configure it, open the dashboard → ✏️ (edit). The visual editor covers area layouts (areas, sections
+with title, icon, layout and label selection, badges) and the general options; card rules, advanced
+selections, entity filters and primary entities are edited as YAML fields inside the editor. You can
+switch to the full YAML view at any time.
+
+> Do not click **Take control** in that dialog: it converts the dashboard into a static copy of the
+> currently generated cards, and Overview Plus no longer updates it.
+
+The dashboard can also be created manually with:
 
 ```yaml
 strategy:

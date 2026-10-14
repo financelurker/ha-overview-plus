@@ -162,3 +162,10 @@ test("card_rules also apply inside override sections", () => {
   });
   assert.ok(view.sections[2].cards.slice(1).every((c) => c.color === "green"));
 });
+
+test("area override: a section without selection matches nothing", () => {
+  const { view } = generateAreaView(makeHass(), "proxmox", {
+    override: { sections: [{ title: "Empty" }, { title: "Also empty", match: {} }, { title: "VMs", match: { label: "virt-guest" } }] },
+  });
+  assert.deepEqual(headings(view), ["VMs", "", "pve1", "pve exporter", "UPS"]);
+});
