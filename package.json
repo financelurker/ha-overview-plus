@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/overview-plus.js --bundle --format=esm --target=es2022 --outfile=dist/overview-plus.js",
+    "build": "esbuild src/overview-plus.js --bundle --format=iife --target=es2022 --outfile=dist/overview-plus.js",
     "check": "tsc -p jsconfig.json",
     "test": "node --test test/*.test.js"
   },
