@@ -220,9 +220,17 @@ export function generateAreaView(hass, areaId, options = {}) {
     /** @type {Set<string>} */
     const claimedDevices = new Set();
     for (const [index, section] of /** @type {OverrideSection[]} */ (override.sections).entries()) {
-      const matched = all.filter(
-        (ctx) => !consumed.has(ctx.entity_id) && !(ctx.device && claimedDevices.has(ctx.device.id)) && matches(section.match, ctx)
-      );
+      // A section without selection matches nothing (not everything), so an empty
+      // section added in the editor does not swallow the whole area.
+      const hasMatch =
+        section.match != null &&
+        !(Array.isArray(section.match) && section.match.length === 0) &&
+        !(typeof section.match === "object" && !Array.isArray(section.match) && Object.keys(section.match).length === 0);
+      const matched = hasMatch
+        ? all.filter(
+            (ctx) => !consumed.has(ctx.entity_id) && !(ctx.device && claimedDevices.has(ctx.device.id)) && matches(section.match, ctx)
+          )
+        : [];
       // A device belongs to the first section that matches any of its entities
       for (const ctx of matched) {
         consumed.add(ctx.entity_id);

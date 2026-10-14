@@ -122,6 +122,17 @@ class OverviewPlusDashboardStrategy {
 
   static registryDependencies = ["areas"];
 
+  /** Visual editor shown in the dashboard's edit dialog. */
+  static async getConfigElement() {
+    // Loaded lazily: the editor is only needed in the dashboard's edit dialog.
+    const { ensureHaForm, EDITOR_TAG } = await import("./editor/editor.js");
+    if (!(await ensureHaForm())) {
+      console.warn(`${LOG} Form components not available – falling back to the YAML editor.`);
+      return undefined;
+    }
+    return document.createElement(EDITOR_TAG);
+  }
+
   /**
    * Suggested title and icon in the "new dashboard" dialog.
    * @param {any} hass
