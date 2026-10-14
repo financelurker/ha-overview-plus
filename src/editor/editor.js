@@ -31,22 +31,29 @@ const ICON = {
   delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
 };
 
+// Spacing follows Home Assistant's own forms: 24px between fields and parts,
+// 12px padding inside collapsible blocks, 8px between the blocks of a list.
 const STYLE = `
   :host { display: block; }
-  .block { margin-bottom: 24px; }
-  .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 8px 0 0; }
-  .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 8px; }
-  .hint { color: var(--secondary-text-color); margin: 8px 0 16px; }
-  .areas { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
-  .general { border-top: 1px solid var(--divider-color); padding-top: 16px; }
-  .rules { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-  .sections { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 8px; padding-left: 8px; }
-  .panel-body { padding: 0 16px 8px; }
+  .block + .block { margin-top: 24px; }
+  .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
+  .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
+  .heading + .subheading { margin-top: 16px; }
+  .hint { color: var(--secondary-text-color); margin: 0 0 16px; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .list:empty { display: none; }
+  .list > .hint { margin: 0; }
+  .areas, .rules { margin-bottom: 16px; }
+  .general { border-top: 1px solid var(--divider-color); padding-top: 24px; }
+  .rule-actions { margin-bottom: 24px; }
+  ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
+  .panel-body { display: flex; flex-direction: column; gap: 24px; padding: 12px; }
+  .panel-body > .row.icons { margin-top: -16px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
-  details.panel { border: 1px solid var(--divider-color); border-radius: 12px; }
-  details.panel > summary { padding: 12px 16px; cursor: pointer; }
-  details.panel > summary .secondary { color: var(--secondary-text-color); margin-left: 8px; }
+  details.panel { border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
+  details.panel > summary { padding: 12px; cursor: pointer; }
+  details.panel > summary .secondary { display: block; color: var(--secondary-text-color); font-size: 0.9em; }
   button.fallback { font: inherit; padding: 6px 12px; border-radius: 16px; border: 1px solid var(--divider-color);
     background: none; color: var(--primary-color); cursor: pointer; }
 `;
@@ -322,7 +329,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     areaBlock.className = "block";
     areaBlock.append(this._heading("editor_areas"), this._hint("editor_areas_help"));
     this._parts.areas = document.createElement("div");
-    this._parts.areas.className = "areas";
+    this._parts.areas.className = "areas list";
     this._parts.addArea = document.createElement("div");
     this._parts.addArea.className = "add-area";
     areaBlock.append(this._parts.areas, this._parts.addArea);
@@ -331,9 +338,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const generalBlock = document.createElement("div");
     generalBlock.className = "block general";
     this._parts.rules = document.createElement("div");
-    this._parts.rules.className = "rules";
+    this._parts.rules.className = "rules list";
     const ruleActions = document.createElement("div");
-    ruleActions.className = "row left";
+    ruleActions.className = "row left rule-actions";
     ruleActions.append(this._button(this._t("editor_add_rule"), () => {
       this._form.rules.push({ r_action: "replace", r_scope: "entity" });
       this._openRules.add(this._form.rules.length - 1);
@@ -454,7 +461,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     });
 
     const sections = document.createElement("div");
-    sections.className = "sections";
+    sections.className = "sections list";
     const renderSections = () => this._renderSections(entry, sections, refreshHeader);
 
     const actions = document.createElement("div");
@@ -539,7 +546,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       });
 
       const row = document.createElement("div");
-      row.className = "row";
+      row.className = "row icons";
       row.append(
         this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(entry, index, -1, rerender), index === 0),
         this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1),
@@ -622,7 +629,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._emit();
       };
       const row = document.createElement("div");
-      row.className = "row";
+      row.className = "row icons";
       row.append(
         this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(-1), index === 0),
         this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1),
