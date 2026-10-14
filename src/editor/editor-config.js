@@ -15,20 +15,21 @@
  *     sections: [{ title, icon, layout, m_*, e_*, p_* }]
  *   }]
  *
- * Selection fields (m_*): m_label, m_integration, m_domain, m_device_class, m_entity_category,
- * m_manufacturer, m_model, m_device, m_device_name, m_entity, m_area, m_floor and the exclusions
- * m_not_label, m_not_integration, m_not_domain, m_not_device_class, m_not_entity_category, m_not_entity.
+ * Selection fields (m_*), all lists: m_label, m_integration, m_domain, m_device_class,
+ * m_entity_category, m_manufacturer, m_model, m_device, m_device_name, m_entity, m_area, m_floor,
+ * and the same criteria as exclusions (m_not_*). Primary entity: p_domain, p_device_class (lists).
  */
 
 /** Keys of the strategy config managed by the form. */
 const MANAGED = ["load_home_settings", "debug", "card_rules", "area_overrides"];
 
-/** Selection criteria editable as fields; device_name is a single pattern. */
+/** Selection criteria editable as fields (all accept one or more values). */
 export const MATCH_FIELDS = [
   "label", "integration", "domain", "device_class", "entity_category",
   "manufacturer", "model", "device", "device_name", "entity", "area", "floor",
 ];
-export const NOT_FIELDS = ["label", "integration", "domain", "device_class", "entity_category", "entity"];
+/** Every criterion can also be excluded. */
+export const NOT_FIELDS = MATCH_FIELDS;
 const ENTITY_FILTER_FIELDS = ["include_domains", "exclude_domains", "include_categories", "exclude_device_classes", "exclude"];
 const CARD_FIELDS = ["name", "icon", "color"];
 
@@ -69,7 +70,6 @@ export function matchRepresentable(match) {
     if (key === "not") {
       return isPlainObject(value) && Object.entries(value).every(([k, v]) => NOT_FIELDS.includes(k) && isStringOrList(v));
     }
-    if (key === "device_name") return typeof value === "string";
     return MATCH_FIELDS.includes(key) && isStringOrList(value);
   });
 }
@@ -84,7 +84,7 @@ export function matchToFields(match) {
   const fields = {};
   for (const key of MATCH_FIELDS) {
     if (match?.[key] === undefined) continue;
-    fields[`m_${key}`] = key === "device_name" ? match[key] : toList(match[key]);
+    fields[`m_${key}`] = toList(match[key]);
   }
   for (const key of NOT_FIELDS) {
     if (match?.not?.[key] !== undefined) fields[`m_not_${key}`] = toList(match.not[key]);
@@ -101,7 +101,7 @@ export function fieldsToMatch(fields) {
   /** @type {Record<string, any>} */
   const match = {};
   for (const key of MATCH_FIELDS) {
-    const value = key === "device_name" ? fields[`m_${key}`] || undefined : fromList(fields[`m_${key}`]);
+    const value = fromList(fields[`m_${key}`]);
     if (value !== undefined) match[key] = value;
   }
   /** @type {Record<string, any>} */
@@ -139,15 +139,15 @@ function fieldsToEntities(fields) {
 /** @param {any} primary */
 function primaryToFields(primary) {
   if (primary === undefined || primary === null) return {};
-  const ok = isPlainObject(primary) && Object.entries(primary).every(([k, v]) => ["domain", "device_class"].includes(k) && typeof v === "string");
+  const ok = isPlainObject(primary) && Object.entries(primary).every(([k, v]) => ["domain", "device_class"].includes(k) && isStringOrList(v));
   if (!ok) return { p_yaml: primary };
-  return { p_domain: primary.domain, p_device_class: primary.device_class };
+  return dropEmpty({ p_domain: toList(primary.domain), p_device_class: toList(primary.device_class) });
 }
 
 /** @param {Record<string, any>} fields */
 function fieldsToPrimary(fields) {
   if (!isEmpty(fields.p_yaml)) return fields.p_yaml;
-  const out = dropEmpty({ domain: fields.p_domain, device_class: fields.p_device_class });
+  const out = dropEmpty({ domain: fromList(fields.p_domain), device_class: fromList(fields.p_device_class) });
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -202,11 +202,13 @@ function formToRule(form) {
   if (match !== undefined) rule.match = match;
   if (form.r_contexts?.length) rule.contexts = [...form.r_contexts];
   if (form.r_scope === "device") rule.scope = "device";
-  if (form.r_action === "hide") {
+  // A device card replaces all entity cards of the device, so it needs a card type
+  const action = form.r_scope === "device" && form.r_action === "adjust" ? "replace" : form.r_action;
+  if (action === "hide") {
     rule.card = false;
   } else {
     rule.card = dropEmpty({
-      ...(form.r_action === "replace" && form.r_type ? { type: form.r_type } : {}),
+      ...(action === "replace" && form.r_type ? { type: form.r_type } : {}),
       ...(isPlainObject(form.r_options) ? form.r_options : {}),
       ...Object.fromEntries(CARD_FIELDS.map((k) => [k, form[`r_${k}`]])),
     });

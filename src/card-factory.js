@@ -124,6 +124,10 @@ export function createCardFactory(rules, context) {
       for (const rule of deviceRules) {
         if (!entities.some((ctx) => matches(rule.match, ctx))) continue;
         if (rule.card === false) return null;
+        if (!rule.card.type) {
+          console.warn("[overview-plus] card_rules: a rule with scope: device needs a card type – ignored.", rule);
+          continue;
+        }
         return substitute(rule.card, {
           device: device?.id,
           area: entities[0]?.area?.area_id,
