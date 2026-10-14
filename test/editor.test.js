@@ -59,9 +59,9 @@ test("every customized area is its own block with a summary; general options sep
   assert.deepEqual(sectionForms(areaPanel(editor, "Virtual › Proxmox")).map((f) => f.data.title), ["Disks"]);
   assert.deepEqual(sectionForms(areaPanel(editor, "Ground › Living room")).map((f) => f.data.title), ["A", "B"]);
   const general = root(editor).querySelector(".general");
-  assert.ok(formWith(general, "card_rules"));
+  assert.ok(buttons(general, "Add rule").length === 1);
   assert.ok(formWith(general, "debug"));
-  assert.ok(!areaPanels(editor).some((p) => formWith(p, "card_rules")));
+  assert.ok(!areaPanels(editor).some((p) => formWith(p, "r_action")));
 });
 
 test("'add area' offers only areas without a layout", () => {
@@ -80,7 +80,7 @@ test("add an area, then a section with labels (consecutive edits are kept)", () 
   const [section] = sectionForms(panel);
   edit(section, { title: "VMs" });
   edit(section, { layout: "compact" });
-  edit(section, { labels: ["virt-guest"] });
+  edit(section, { m_label: ["virt-guest"] });
   assert.deepEqual(last(), {
     type: "custom:overview-plus",
     favorite_entities: ["light.lamp"],
@@ -89,6 +89,9 @@ test("add an area, then a section with labels (consecutive edits are kept)", () 
   assert.equal(summary(panel), "Virtual › Proxmox1 section");
   const sectionSummary = panel.querySelector(".sections details > summary").textContent;
   assert.equal(sectionSummary, "VMsCompact (one tile per device) · VM");
+  // the selection is a form field, no YAML field anywhere
+  assert.ok(fieldNames(section.schema).includes("m_integration"));
+  assert.ok(!fieldNames(section.schema).some((n) => n.endsWith("_yaml")));
 });
 
 test("changes in one area do not touch the other", () => {
@@ -102,9 +105,9 @@ test("conditional fields: primary only for compact, badge entities only for sele
   const { editor, last } = setup(TWO_AREAS);
   const panel = areaPanel(editor, "Virtual › Proxmox");
   const [section] = sectionForms(panel);
-  assert.ok(!fieldNames(section.schema).includes("primary"));
+  assert.ok(!fieldNames(section.schema).includes("p_domain"));
   edit(section, { layout: "compact" });
-  assert.ok(fieldNames(section.schema).includes("primary"));
+  assert.ok(fieldNames(section.schema).includes("p_domain"));
 
   const options = formWith(panel, "badges");
   assert.ok(!fieldNames(options.schema).includes("badge_entities"));
@@ -174,4 +177,73 @@ test("unknown options and advanced selections survive editing", () => {
     ...config,
     area_overrides: { proxmox: { future: 1, sections: [{ title: "Exporter", match: { integration: "mqtt" }, entities: { include_domains: ["sensor"] } }] } },
   });
+});
+
+const rulePanels = (editor) => [...root(editor).querySelectorAll(".rules > details")];
+const ruleForm = (editor, i) => formWith(rulePanels(editor)[i], "r_action");
+
+test("card rules are blocks with form fields", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus" });
+  click(buttons(root(editor), "Add rule")[0]);
+  const form = ruleForm(editor, 0);
+  assert.ok(fieldNames(form.schema).includes("r_type"));
+  edit(form, { r_type: "custom:better-thermostat-normal-climate-card" });
+  edit(form, { m_integration: ["better_thermostat"] });
+  edit(form, { m_domain: ["climate"] });
+  assert.deepEqual(last().card_rules, [
+    { match: { integration: "better_thermostat", domain: "climate" }, card: { type: "custom:better-thermostat-normal-climate-card" } },
+  ]);
+  assert.equal(summary(rulePanels(editor)[0]), "1. Replace card: custom:better-thermostat-normal-climate-cardbetter_thermostat · climate");
+});
+
+test("rule fields follow the action", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus", card_rules: [{ match: { entity: "climate.living" }, card: { name: "Living" } }] });
+  const form = ruleForm(editor, 0);
+  assert.deepEqual([form.data.r_action, form.data.r_name], ["adjust", "Living"]);
+  assert.ok(!fieldNames(form.schema).includes("r_type"));
+  edit(form, { r_action: "hide" });
+  assert.ok(!fieldNames(form.schema).includes("r_name"), "hide has no card fields");
+  assert.deepEqual(last().card_rules, [{ match: { entity: "climate.living" }, card: false }]);
+});
+
+test("move and delete rules", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus", card_rules: [
+    { match: { domain: "a" }, card: false },
+    { match: { domain: "b" }, card: false },
+  ] });
+  const general = root(editor).querySelector(".general");
+  click(buttons(general, "Move down")[0]);
+  assert.deepEqual(last().card_rules.map((r) => r.match.domain), ["b", "a"]);
+  click(buttons(general, "Delete rule")[0]);
+  assert.deepEqual(last().card_rules.map((r) => r.match.domain), ["a"]);
+});
+
+test("a YAML field only appears for selections a form cannot show", () => {
+  const { editor } = setup({ type: "custom:overview-plus", card_rules: [{ match: [{ domain: "a" }, { domain: "b" }], card: false }] });
+  const names = fieldNames(ruleForm(editor, 0).schema);
+  assert.ok(names.includes("m_yaml"));
+  assert.ok(!names.includes("m_domain"));
+  // clearing it switches to the fields
+  edit(ruleForm(editor, 0), { m_yaml: undefined });
+  assert.ok(fieldNames(ruleForm(editor, 0).schema).includes("m_domain"));
+});
+
+test("every field has a label and every option list is filled from the data", async () => {
+  const { collectOptions, ruleSchema, sectionSchema } = await import("../src/editor/schemas.js");
+  const { t } = await import("../src/i18n.js");
+  const hass = makeHass();
+  const opts = collectOptions(hass);
+  assert.ok(opts.integrations.some((o) => o.value === "better_thermostat"));
+  assert.ok(opts.domains.some((o) => o.value === "climate"));
+  assert.ok(opts.manufacturers.some((o) => o.label === "Proxmox VE Exporter" && o.value === "^Proxmox VE Exporter$"));
+  const all = [
+    ...fieldNames(sectionSchema({ hass, t: (k, p) => t(hass, k, p) }, opts, { layout: "compact" })),
+    ...fieldNames(ruleSchema({ hass, t: (k, p) => t(hass, k, p) }, opts, {})),
+    "m_yaml", "e_yaml", "p_yaml",
+  ].filter(Boolean);
+  for (const lang of ["en", "de"]) {
+    const h = { locale: { language: lang } };
+    const missing = all.filter((name) => t(h, `editor_${name}`) === `editor_${name}`);
+    assert.deepEqual(missing, [], `missing ${lang} labels`);
+  }
 });

@@ -1,13 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fromForm, toForm } from "../src/editor/editor-config.js";
+import { fieldsToMatch, fromForm, matchToFields, toForm } from "../src/editor/editor-config.js";
 
 const FULL = {
   type: "custom:overview-plus",
   favorite_entities: ["light.lamp"],
   debug: true,
   load_home_settings: false,
-  card_rules: [{ match: { integration: "better_thermostat" }, card: { type: "custom:bt" } }],
+  card_rules: [
+    { match: { integration: "better_thermostat", domain: "climate" }, card: { type: "custom:bt" } },
+    { match: { entity: "climate.bath" }, card: { name: "Bath", icon: "mdi:bathtub" } },
+    { match: { label: "hidden" }, card: false, stop: true },
+    { match: { domain: "camera" }, contexts: ["area"], card: { type: "picture-entity", show_state: false } },
+    { match: { label: "virt-guest" }, scope: "device", card: { type: "entities", title: "$device", entities: "$entities" } },
+  ],
   area_overrides: {
     proxmox: {
       badges: false,
@@ -15,9 +21,13 @@ const FULL = {
       future_option: 42,
       sections: [
         { title: "Hypervisor", icon: "mdi:server", match: { label: "virt-hypervisor" }, layout: "devices" },
-        { title: "VMs", match: { label: ["virt-guest", "virt-lxc"] }, layout: "compact", primary: { domain: "binary_sensor" } },
-        { title: "Exporter", match: { integration: "mqtt", manufacturer: "Proxmox" }, entities: { include_domains: ["sensor"] } },
-        { title: "Either", match: [{ domain: "light" }, { domain: "switch" }] },
+        { title: "VMs", match: { label: ["virt-guest", "virt-lxc"] }, layout: "compact", primary: { domain: "binary_sensor", device_class: "running" } },
+        {
+          title: "Exporter",
+          match: { integration: "mqtt", manufacturer: "Proxmox", device_name: "^pve", not: { entity_category: "config" } },
+          entities: { include_domains: ["sensor"], exclude: ["sensor.x"] },
+        },
+        { title: "Either", match: [{ domain: "light" }, { domain: "switch" }], primary: { domain: "sensor", not: { device_class: "x" } } },
       ],
     },
     truenas: { badges: ["sensor.pool_usage"], show_automations: false },
@@ -33,49 +43,78 @@ test("minimal config round trips without adding keys", () => {
   assert.deepEqual(fromForm(toForm(min), min), min);
 });
 
-test("label-only matches become the label shortcut", () => {
-  const form = toForm(FULL);
-  const [hyper, vms, exporter, either] = form.areas[0].sections;
-  assert.deepEqual([hyper.labels, hyper.match], [["virt-hypervisor"], undefined]);
-  assert.deepEqual(vms.labels, ["virt-guest", "virt-lxc"]);
-  assert.deepEqual([exporter.labels, exporter.match], [[], { integration: "mqtt", manufacturer: "Proxmox" }]);
-  assert.ok(Array.isArray(either.match));
+test("selections become form fields, including exclusions", () => {
+  const [, vms, exporter] = toForm(FULL).areas[0].sections;
+  assert.deepEqual(vms.m_label, ["virt-guest", "virt-lxc"]);
+  assert.deepEqual([vms.p_domain, vms.p_device_class], ["binary_sensor", "running"]);
+  assert.deepEqual(
+    { i: exporter.m_integration, m: exporter.m_manufacturer, n: exporter.m_device_name, x: exporter.m_not_entity_category },
+    { i: ["mqtt"], m: ["Proxmox"], n: "^pve", x: ["config"] }
+  );
+  assert.deepEqual([exporter.e_include_domains, exporter.e_exclude], [["sensor"], ["sensor.x"]]);
+  assert.equal(exporter.m_yaml, undefined);
 });
 
-test("badges modes", () => {
-  const form = toForm(FULL);
-  assert.equal(form.areas[0].badges, "none");
-  assert.deepEqual([form.areas[1].badges, form.areas[1].badge_entities], ["custom", ["sensor.pool_usage"]]);
+test("only constructs a form cannot show fall back to YAML", () => {
+  const either = toForm(FULL).areas[0].sections[3];
+  assert.ok(Array.isArray(either.m_yaml), "OR list stays YAML");
+  assert.deepEqual(either.p_yaml, { domain: "sensor", not: { device_class: "x" } });
+  assert.deepEqual(matchToFields({ entity_label: "x" }), { m_yaml: { entity_label: "x" } });
+  assert.deepEqual(matchToFields({ device_name: ["a", "b"] }), { m_yaml: { device_name: ["a", "b"] } });
 });
 
-test("editing in the form produces the expected config", () => {
+test("card rules become form fields", () => {
+  const [bt, bath, hide, camera, device] = toForm(FULL).rules;
+  assert.deepEqual([bt.r_action, bt.r_type, bt.m_integration, bt.m_domain], ["replace", "custom:bt", ["better_thermostat"], ["climate"]]);
+  assert.deepEqual([bath.r_action, bath.r_name, bath.r_icon], ["adjust", "Bath", "mdi:bathtub"]);
+  assert.deepEqual([hide.r_action, hide.r_stop], ["hide", true]);
+  assert.deepEqual([camera.r_contexts, camera.r_options], [["area"], { show_state: false }]);
+  assert.deepEqual([device.r_scope, device.r_options], ["device", { title: "$device", entities: "$entities" }]);
+});
+
+test("editing card rules in the form", () => {
+  const form = toForm({});
+  form.rules.push({ r_action: "replace", r_type: "custom:bt", r_scope: "entity", m_integration: ["better_thermostat"] });
+  form.rules.push({ r_action: "adjust", r_name: "Bad", r_scope: "entity", m_entity: ["climate.bad"] });
+  form.rules.push({ r_action: "hide", r_scope: "entity", m_label: ["hidden"], r_type: "ignored-when-hidden" });
+  assert.deepEqual(fromForm(form, {}).card_rules, [
+    { match: { integration: "better_thermostat" }, card: { type: "custom:bt" } },
+    { match: { entity: "climate.bad" }, card: { name: "Bad" } },
+    { match: { label: "hidden" }, card: false },
+  ]);
+});
+
+test("editing a section in the form", () => {
   const original = { type: "custom:overview-plus", favorite_entities: ["x.y"] };
   const form = toForm(original);
   form.areas.push({
-    area: "network",
-    badges: "default",
-    badge_entities: [],
-    show_other_devices: true,
-    show_automations: true,
+    area: "network", badges: "default", badge_entities: [], show_other_devices: true, show_automations: true,
     sections: [
-      { title: "Switches", icon: "mdi:switch", layout: "table", labels: ["net-switch"], match: { integration: "unifi" } },
-      { title: "", labels: [], match: undefined },
+      { title: "Switches", icon: "mdi:switch", layout: "table", m_label: ["net-switch"], m_integration: ["unifi"], m_not_domain: ["button"], e_include_domains: ["sensor", "switch"] },
+      { title: "", m_label: [] },
     ],
   });
-  form.debug = true;
   assert.deepEqual(fromForm(form, original), {
     type: "custom:overview-plus",
     favorite_entities: ["x.y"],
-    debug: true,
     area_overrides: {
       network: {
         sections: [
-          { title: "Switches", icon: "mdi:switch", layout: "table", match: { integration: "unifi", label: "net-switch" } },
+          {
+            title: "Switches", icon: "mdi:switch", layout: "table",
+            match: { label: "net-switch", integration: "unifi", not: { domain: "button" } },
+            entities: { include_domains: ["sensor", "switch"] },
+          },
           {},
         ],
       },
     },
   });
+});
+
+test("clearing the YAML fallback switches back to the fields", () => {
+  assert.deepEqual(fieldsToMatch({ m_yaml: [{ domain: "light" }], m_domain: ["switch"] }), [{ domain: "light" }]);
+  assert.deepEqual(fieldsToMatch({ m_yaml: undefined, m_domain: ["switch"] }), { domain: "switch" });
 });
 
 test("areas without an area id are dropped", () => {

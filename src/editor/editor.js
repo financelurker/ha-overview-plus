@@ -7,18 +7,20 @@
  * the element receives `hass`, gets `setConfig(config)` and fires `config-changed`
  * with `{ config }` on every change.
  *
- * Layout (no nested dialogs):
- *   - area picker
- *   - for the selected area: area options, then one collapsible block per section
- *     (title, icon, layout, labels; advanced YAML fields collapsed), with move/delete
- *     buttons, and "add section"
- *   - card rules (YAML) and general options
+ * Layout (no dialogs):
+ *   - Area layouts: one collapsible block per customized area with its options and its
+ *     sections (each a collapsible block with move/delete buttons), "add area" below
+ *   - General: card rules (each a collapsible block) and the dashboard-wide options
+ *
+ * Everything is a form field; a YAML field appears only for constructs the form cannot
+ * show (see editor-config.js).
  *
  * Fields are rendered with Home Assistant's `ha-form`. Value changes update the state
  * without re-rendering (keeps the focus); structure changes re-render the affected part.
  */
 
 import { fromForm, toForm } from "./editor-config.js";
+import { collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
 export const EDITOR_TAG = "overview-plus-strategy-editor";
@@ -29,15 +31,15 @@ const ICON = {
   delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
 };
 
-const LAYOUTS = ["tiles", "devices", "compact", "table"];
-
 const STYLE = `
   :host { display: block; }
   .block { margin-bottom: 24px; }
+  .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 8px 0 0; }
   .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 8px; }
   .hint { color: var(--secondary-text-color); margin: 8px 0 16px; }
   .areas { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
   .general { border-top: 1px solid var(--divider-color); padding-top: 16px; }
+  .rules { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
   .sections { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 8px; padding-left: 8px; }
   .panel-body { padding: 0 16px 8px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
@@ -76,6 +78,15 @@ export async function ensureHaForm() {
 /** @param {any} v */
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
+/** @param {any} v */
+const filled = (v) => v !== undefined && v !== null && v !== "" && JSON.stringify(v) !== "{}" && JSON.stringify(v) !== "[]";
+
+/** Things that change which fields a section form shows. @param {any} s */
+const sectionShape = (s) => [(s.layout ?? "tiles") === "compact", filled(s.m_yaml), filled(s.e_yaml), filled(s.p_yaml)].join();
+
+/** Things that change which fields a rule form shows. @param {any} r */
+const ruleShape = (r) => [r.r_action || "replace", filled(r.m_yaml)].join();
+
 /** @param {string} area */
 const newAreaEntry = (area) => ({
   area,
@@ -100,6 +111,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openAreas = new Set();
     /** @type {Map<string, Set<number>>} per area: indexes of expanded section blocks */
     this._openSections = new Map();
+    /** @type {Set<number>} indexes of expanded card rule blocks */
+    this._openRules = new Set();
+    /** @type {any} */
+    this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
     this._lastEmitted = undefined;
     /** @type {Record<string, HTMLElement>} */
@@ -134,6 +149,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openAreas = new Set([...this._openAreas].filter((id) => ids.has(id)));
     if (ids.size === 1) this._openAreas.add([...ids][0]);
     this._openSections = new Map();
+    this._openRules = new Set([...this._openRules].filter((i) => i < this._form.rules.length));
     this._renderAll();
   }
 
@@ -296,6 +312,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const root = /** @type {ShadowRoot} */ (this.shadowRoot);
     if (!this._hass || !root) return;
     root.innerHTML = "";
+    this._opts = collectOptions(this._hass);
     const style = document.createElement("style");
     style.textContent = STYLE;
     root.appendChild(style);
@@ -313,13 +330,22 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     // ---- General: card rules and options for the whole dashboard
     const generalBlock = document.createElement("div");
     generalBlock.className = "block general";
-    generalBlock.append(this._heading("editor_general"));
+    this._parts.rules = document.createElement("div");
+    this._parts.rules.className = "rules";
+    const ruleActions = document.createElement("div");
+    ruleActions.className = "row left";
+    ruleActions.append(this._button(this._t("editor_add_rule"), () => {
+      this._form.rules.push({ r_action: "replace", r_scope: "entity" });
+      this._openRules.add(this._form.rules.length - 1);
+      this._renderRules();
+      this._emit();
+    }));
     generalBlock.append(
-      this._haForm(
-        [{ name: "card_rules", selector: { object: {} } }],
-        { card_rules: this._form.card_rules },
-        (v) => { this._form.card_rules = v.card_rules; this._emit(); }
-      ),
+      this._heading("editor_general"),
+      this._subheading("editor_card_rules"),
+      this._hint("editor_card_rules_help"),
+      this._parts.rules,
+      ruleActions,
       this._haForm(
         [{ name: "", type: "grid", schema: [
           { name: "load_home_settings", selector: { boolean: {} } },
@@ -333,6 +359,19 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     root.append(areaBlock, generalBlock);
     this._built = true;
     this._renderAreas();
+    this._renderRules();
+  }
+
+  /** @param {string} key */
+  _subheading(key) {
+    const el = document.createElement("div");
+    el.className = "subheading";
+    el.textContent = this._t(key);
+    return el;
+  }
+
+  _ctx() {
+    return { hass: this._hass, t: (/** @type {string} */ k, /** @type {any} */ p) => this._t(k, p) };
   }
 
   /** @param {string} key */
@@ -422,7 +461,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     actions.className = "row left";
     actions.append(
       this._button(this._t("editor_add_section"), () => {
-        entry.sections.push({ title: "", layout: "tiles", labels: [] });
+        entry.sections.push({ title: "", layout: "tiles", m_label: [] });
         this._sectionState(entry.area).add(entry.sections.length - 1);
         renderSections();
         refreshHeader();
@@ -465,35 +504,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     ];
   }
 
-  /** @param {any} section */
-  _sectionSchema(section) {
-    const layoutOptions = LAYOUTS.map((value) => ({ value, label: this._t(`editor_layout_${value}`) }));
-    return [
-      { name: "", type: "grid", schema: [
-        { name: "title", selector: { text: {} } },
-        { name: "icon", selector: { icon: {} } },
-      ] },
-      { name: "layout", selector: { select: { mode: "dropdown", options: layoutOptions } } },
-      { name: "labels", selector: { label: { multiple: true } } },
-      {
-        name: "",
-        type: "expandable",
-        flatten: true,
-        title: this._t("editor_advanced"),
-        schema: [
-          { name: "match", selector: { object: {} } },
-          { name: "entities", selector: { object: {} } },
-          ...((section.layout ?? "tiles") === "compact" ? [{ name: "primary", selector: { object: {} } }] : []),
-        ],
-      },
-    ];
-  }
-
   /** @param {any} section @param {number} index */
   _sectionHeader(section, index) {
     const header = section.title || this._t("editor_section_n", { n: String(index + 1) });
-    const labels = (section.labels || []).map((/** @type {string} */ id) => this._hass.labels?.[id]?.name || id);
-    const secondary = [this._t(`editor_layout_${section.layout || "tiles"}`), ...labels].join(" · ");
+    const selection = matchSummary(this._ctx(), section);
+    const secondary = [this._t(`editor_layout_${section.layout || "tiles"}`), selection].filter(Boolean).join(" · ");
     return { header, secondary };
   }
 
@@ -513,11 +528,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         else open.delete(index);
       });
 
-      const form = this._haForm(this._sectionSchema(section), clone(section), (v) => {
-        const layoutChanged = (v.layout ?? "tiles") !== (section.layout ?? "tiles");
+      const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
+        const before = sectionShape(section);
         for (const key of Object.keys(section)) delete section[key];
         Object.assign(section, v);
-        if (layoutChanged) form.schema = this._sectionSchema(section);
+        if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
         const h = this._sectionHeader(section, index);
         panel.setHeader(h.header, h.secondary);
         this._emit();
@@ -562,6 +577,65 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     if (b) open.add(index);
     rerender();
     this._emit();
+  }
+
+  /** @param {any} rule @param {number} index */
+  _ruleHeader(rule, index) {
+    const action = rule.r_action || "replace";
+    let header = this._t(`editor_action_${action}`);
+    if (action === "replace" && rule.r_type) header += `: ${rule.r_type}`;
+    if (action === "adjust" && rule.r_name) header += `: ${rule.r_name}`;
+    const selection = matchSummary(this._ctx(), rule) || this._t("editor_all_entities");
+    return { header: `${index + 1}. ${header}`, secondary: selection };
+  }
+
+  _renderRules() {
+    const container = this._parts.rules;
+    if (!container) return;
+    container.innerHTML = "";
+    const rules = this._form.rules;
+    rules.forEach((/** @type {any} */ rule, /** @type {number} */ index) => {
+      const { header, secondary } = this._ruleHeader(rule, index);
+      const panel = this._panel(header, secondary, this._openRules.has(index), (open) => {
+        if (open) this._openRules.add(index);
+        else this._openRules.delete(index);
+      });
+      const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
+        const before = ruleShape(rule);
+        for (const key of Object.keys(rule)) delete rule[key];
+        Object.assign(rule, v);
+        if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
+        const h = this._ruleHeader(rule, index);
+        panel.setHeader(h.header, h.secondary);
+        this._emit();
+      });
+      const swap = (/** @type {number} */ delta) => {
+        const target = index + delta;
+        [rules[index], rules[target]] = [rules[target], rules[index]];
+        const a = this._openRules.has(index);
+        const b = this._openRules.has(target);
+        this._openRules.delete(index);
+        this._openRules.delete(target);
+        if (a) this._openRules.add(target);
+        if (b) this._openRules.add(index);
+        this._renderRules();
+        this._emit();
+      };
+      const row = document.createElement("div");
+      row.className = "row";
+      row.append(
+        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(-1), index === 0),
+        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1),
+        this._iconButton(ICON.delete, this._t("editor_delete_rule"), () => {
+          rules.splice(index, 1);
+          this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          this._renderRules();
+          this._emit();
+        })
+      );
+      panel.body.append(form, row);
+      container.appendChild(panel.root);
+    });
   }
 }
 

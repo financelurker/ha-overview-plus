@@ -39,11 +39,16 @@ To configure it, open the dashboard → ✏️ (edit). The visual editor shows:
 
 - **Area layouts:** every area with its own layout is a collapsible block showing its sections and a
   short summary. Inside: badges, the toggles for remaining devices and automations, and the sections
-  as collapsible blocks (title, icon, layout, label; *Advanced* holds YAML fields for selections beyond
-  labels, entity filters and the primary entity) with buttons to move or delete them.
-  *Add area* below the list gives another area its own layout; *Remove area layout* returns an area
-  to the default view.
-- **General**, separated below: card rules (YAML) and the options for the whole dashboard.
+  (title, icon, layout, label). *Refine selection*, *Entity filter* and *Primary entity* are form
+  fields too: integration, domain, device class, manufacturer and model are dropdowns filled from your
+  own installation (own values can be typed), plus devices, entities, device name and exclusions.
+  *Add area* gives another area its own layout; *Remove area layout* returns it to the default view.
+- **General:** card rules as blocks (action, card, name, icon, color, *Applies to* with the same
+  selection fields, *Where and how*), and the options for the whole dashboard.
+
+Only two things are YAML in the editor: options specific to a replacement card (*More card options*,
+because every card type has different options), and – only if your configuration contains one – a
+selection the form cannot show, such as an either/or list.
 
 You can switch to the full YAML view at any time.
 
