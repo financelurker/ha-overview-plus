@@ -117,7 +117,8 @@ export function fromForm(form, original) {
       return dropEmpty({ ...sectionRest, match: joinMatch(labels, match) });
     });
     if (list.length) o.sections = list;
-    overrides[area] = o;
+    // An area without sections and with default options needs no override
+    if (Object.keys(o).length) overrides[area] = o;
   }
   if (Object.keys(overrides).length) config.area_overrides = overrides;
 
