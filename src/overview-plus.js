@@ -121,6 +121,14 @@ class OverviewPlusDashboardStrategy {
   }
 
   static registryDependencies = ["areas"];
+
+  /**
+   * Suggested title and icon in the "new dashboard" dialog.
+   * @param {any} hass
+   */
+  static getCreateSuggestions(hass) {
+    return { title: t(hass, "dashboard_title"), icon: "mdi:home-plus" };
+  }
 }
 
 class OverviewPlusAreaViewStrategy {
@@ -160,5 +168,19 @@ const ELEMENTS = [
 ];
 for (const [tag, cls] of ELEMENTS) {
   if (!customElements.get(tag)) customElements.define(tag, cls);
+}
+
+// List the dashboard under "Community dashboards" in the "new dashboard" dialog
+// (see home-assistant/frontend src/data/lovelace_custom_strategies.ts).
+const registry = /** @type {any} */ (window);
+registry.customStrategies = registry.customStrategies || [];
+if (!registry.customStrategies.some((/** @type {any} */ s) => s.type === "overview-plus" && s.strategyType === "dashboard")) {
+  registry.customStrategies.push({
+    type: "overview-plus",
+    strategyType: "dashboard",
+    name: "Overview Plus",
+    description: "The Overview dashboard with configurable cards and area layouts.",
+    documentationURL: "https://github.com/financelurker/ha-overview-plus",
+  });
 }
 console.info(`${LOG} ${VERSION} loaded`);
