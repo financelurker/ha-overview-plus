@@ -33,7 +33,8 @@ no flicker from swapping cards after the built-in dashboard has loaded.
 
 ## Usage
 
-Create a new dashboard, open the raw configuration editor and use:
+Settings → Dashboards → **Add dashboard** → *Community dashboards* → **Overview Plus**.
+To configure it, open the dashboard → ✏️ (edit) and change the YAML, or create it manually with:
 
 ```yaml
 strategy:

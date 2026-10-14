@@ -7,6 +7,7 @@
 /** @type {Record<string, Record<string, string>>} */
 const STRINGS = {
   en: {
+    dashboard_title: "Overview Plus",
     light: "Lights",
     light_on: "On",
     light_off: "Off",
@@ -24,6 +25,7 @@ const STRINGS = {
     unknown_area: "Unknown area: {area}",
   },
   de: {
+    dashboard_title: "Overview Plus",
     light: "Licht",
     light_on: "An",
     light_off: "Aus",
