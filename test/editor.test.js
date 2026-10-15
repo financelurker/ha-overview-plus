@@ -296,3 +296,17 @@ test("tile class options come from the area's own regular sensors, plus configur
   assert.deepEqual(proxmox.sensor.map((o) => o.value), ["power"], "only the configured value: no classified regular sensors");
   assert.deepEqual(proxmox.alert.map((o) => o.value), ["problem", "running"]);
 });
+
+test("tile with selected entities: entity fields only in that mode", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
+  const options = formWith(areaPanel(editor, "Virtual › Proxmox"), "t_sensors");
+  assert.ok(!fieldNames(options.schema).includes("t_entities"));
+  assert.ok(fieldNames(options.schema).includes("t_alert_entities"));
+  edit(options, { t_sensors: "entities" });
+  assert.ok(fieldNames(options.schema).includes("t_entities"));
+  assert.ok(!fieldNames(options.schema).includes("t_sensor_classes"));
+  edit(options, { t_entities: ["sensor.pve_cpu"], t_show_names: true, t_alert_entities: ["binary_sensor.vm_db_status"] });
+  assert.deepEqual(last().area_overrides.proxmox.tile, {
+    entities: ["sensor.pve_cpu"], show_names: true, alert_entities: ["binary_sensor.vm_db_status"],
+  });
+});

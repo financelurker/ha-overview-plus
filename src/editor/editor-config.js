@@ -233,13 +233,18 @@ export function toForm(config) {
     rules: (Array.isArray(config.card_rules) ? config.card_rules : []).map(ruleToForm),
     areas: Object.entries(overrides).map(([area, o]) => {
       const { sections, badges, show_other_devices, show_automations, tile, ...rest } = isPlainObject(o) ? o : {};
-      const { sensor_classes, alert_classes, color, name, ...tileExtra } = isPlainObject(tile) ? tile : {};
+      const { sensor_classes, alert_classes, color, name, entities, show_names, alert_entities, ...tileExtra } =
+        isPlainObject(tile) ? tile : {};
+      const entityList = toList(entities);
       return {
         ...rest,
         area,
-        t_sensors: sensor_classes === undefined ? "default" : "custom",
+        t_sensors: entityList.length ? "entities" : sensor_classes === undefined ? "default" : "custom",
         t_sensor_classes: toList(sensor_classes),
+        t_entities: entityList,
+        t_show_names: show_names === true,
         t_alert_classes: toList(alert_classes),
+        t_alert_entities: toList(alert_entities),
         t_color: color,
         t_name: name,
         tile_extra: tileExtra,
@@ -275,14 +280,19 @@ export function fromForm(form, original) {
     if (!entry?.area) continue;
     const {
       area, badges, badge_entities, show_other_devices, show_automations, sections,
-      t_sensors, t_sensor_classes, t_alert_classes, t_color, t_name, tile_extra, ...rest
+      t_sensors, t_sensor_classes, t_entities, t_show_names, t_alert_classes, t_alert_entities, t_color, t_name, tile_extra, ...rest
     } = entry;
     /** @type {Record<string, any>} */
     const o = { ...rest };
     /** @type {Record<string, any>} */
     const tile = { ...(isPlainObject(tile_extra) ? tile_extra : {}) };
     if (t_sensors === "custom") tile.sensor_classes = [...(t_sensor_classes || [])];
+    if (t_sensors === "entities" && t_entities?.length) {
+      tile.entities = [...t_entities];
+      if (t_show_names === true) tile.show_names = true;
+    }
     if (t_alert_classes?.length) tile.alert_classes = [...t_alert_classes];
+    if (t_alert_entities?.length) tile.alert_entities = [...t_alert_entities];
     if (t_color) tile.color = t_color;
     if (t_name) tile.name = t_name;
     if (Object.keys(tile).length) o.tile = tile;

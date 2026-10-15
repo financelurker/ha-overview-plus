@@ -103,7 +103,10 @@ const newAreaEntry = (area) => ({
   show_automations: true,
   t_sensors: "default",
   t_sensor_classes: [],
+  t_entities: [],
+  t_show_names: false,
   t_alert_classes: [],
+  t_alert_entities: [],
   sections: [],
 });
 
@@ -510,7 +513,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       show_automations: entry.show_automations,
       t_sensors: entry.t_sensors ?? "default",
       t_sensor_classes: entry.t_sensor_classes,
+      t_entities: entry.t_entities,
+      t_show_names: entry.t_show_names,
       t_alert_classes: entry.t_alert_classes,
+      t_alert_entities: entry.t_alert_entities,
       t_color: entry.t_color,
       t_name: entry.t_name,
     };
@@ -519,7 +525,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   /** @param {any} entry */
   _optionsSchema(entry) {
     const badgeOptions = ["default", "none", "custom"].map((value) => ({ value, label: this._t(`editor_badges_${value}`) }));
-    const sensorModes = ["default", "custom"].map((value) => ({ value, label: this._t(`editor_t_sensors_${value}`) }));
+    const sensorModes = ["default", "custom", "entities"].map((value) => ({ value, label: this._t(`editor_t_sensors_${value}`) }));
     const tileClasses = areaTileClassOptions(this._hass, entry.area, entry.t_sensor_classes, entry.t_alert_classes);
     /** @param {{ value: string, label: string }[]} options */
     const classes = (options) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options } });
@@ -539,7 +545,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           ] },
           { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
           ...((entry.t_sensors ?? "default") === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
+          ...((entry.t_sensors ?? "default") === "entities" ? [
+            { name: "t_entities", selector: { entity: { multiple: true, reorder: true } } },
+            { name: "t_show_names", selector: { boolean: {} } },
+          ] : []),
           { name: "t_alert_classes", selector: classes(tileClasses.alert) },
+          { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
         ],
       },
     ];
