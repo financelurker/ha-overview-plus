@@ -47,9 +47,13 @@ replaces the climate tile with a thermostat card.
 
 ## Installation
 
-### HACS (once released)
+### HACS
 
-1. HACS → ⋮ → Custom repositories → add `https://github.com/financelurker/ha-overview-plus` as type *Dashboard*.
+[![Open your Home Assistant instance and open the Overview Plus repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=financelurker&repository=ha-overview-plus&category=plugin)
+
+1. Click the button above. It opens the repository in HACS on your Home Assistant and adds it as a
+   custom repository if needed. Without the button: HACS → ⋮ → Custom repositories → add
+   `https://github.com/financelurker/ha-overview-plus` as type *Dashboard*.
 2. Install **Overview Plus** and reload the browser.
 
 ### Manual / development
