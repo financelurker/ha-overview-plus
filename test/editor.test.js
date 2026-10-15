@@ -275,3 +275,14 @@ test("field types: required fields, device rules without 'adjust', no area field
   assert.deepEqual(byName(deviceRule, "r_action").selector.select.options.map((o) => o.value), ["replace", "hide"]);
   assert.ok(byName(deviceRule, "r_type"), "adjust is shown as replace for device rules");
 });
+
+test("tile options: sensor classes only when 'selected sensor classes' is chosen", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const options = formWith(panel, "t_sensors");
+  assert.ok(!fieldNames(options.schema).includes("t_sensor_classes"));
+  edit(options, { t_sensors: "custom" });
+  assert.ok(fieldNames(options.schema).includes("t_sensor_classes"));
+  edit(options, { t_sensor_classes: ["power"], t_alert_classes: ["problem"] });
+  assert.deepEqual(last().area_overrides.proxmox.tile, { sensor_classes: ["power"], alert_classes: ["problem"] });
+});
