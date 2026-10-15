@@ -22,23 +22,23 @@ Taken from the Home Assistant demo integration with HA 2026.2. Newer versions ad
 **Overview page:** favorites, then one tile per area, grouped by floor. The *Server* tile shows two
 selected sensors (CPU and memory) instead of temperature.
 
-![Overview page](docs/images/overview.png)
+![Overview page](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview.png)
 
 **Area with its own sections:** *Host* and *Virtual machines* are selected by label, and the area
 name is removed from the card names ("Server CPU load" → "CPU load"). Card rules set the CPU and
 memory icons.
 
-![Area view with own sections](docs/images/area-sections.png)
+![Area view with own sections](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections.png)
 
 **Area with the default layout:** same structure as the built-in Overview. Here a card rule
 replaces the climate tile with a thermostat card.
 
-![Default area view](docs/images/area-default.png)
+![Default area view](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-default.png)
 
 <table>
 <tr>
-<td width="50%" valign="top"><b>Visual editor:</b> area layouts and card rules are edited in forms.<br><br><img src="docs/images/editor.png" alt="Visual editor"></td>
-<td width="50%" valign="top"><b>Mobile</b><br><br><img src="docs/images/overview-mobile.png" alt="Overview page on a phone"></td>
+<td width="50%" valign="top"><b>Visual editor:</b> area layouts and card rules are edited in forms.<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor.png" alt="Visual editor"></td>
+<td width="50%" valign="top"><b>Mobile</b><br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png" alt="Overview page on a phone"></td>
 </tr>
 </table>
 
