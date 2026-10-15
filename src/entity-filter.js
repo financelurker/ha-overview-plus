@@ -97,3 +97,24 @@ export const SUMMARY_ICONS = {
   scenes: "mdi:palette",
   automations: "mdi:robot",
 };
+
+// Devices view (devices without area): helper-like platforms and domains are left out.
+// See home-assistant/frontend src/panels/lovelace/strategies/home/helpers/other-devices-filters.ts
+const OTHER_DEVICES_HIDDEN_PLATFORMS = ["automation", "script", "hassio", "backup", "mobile_app", "zone", "person"];
+const OTHER_DEVICES_HIDDEN_DOMAINS = [
+  "ai_task", "automation", "configurator", "device_tracker", "event", "geo_location", "notify",
+  "persistent_notification", "script", "sun", "tag", "todo", "zone",
+  "assist_satellite", "conversation", "stt", "tts",
+];
+
+/**
+ * Entity shown in the devices view: no area, not hidden, not from helper-like platforms or domains.
+ * @param {import("./registry.js").EntityContext} ctx
+ */
+export const isOtherDeviceEntity = (ctx) =>
+  !ctx.area &&
+  !!ctx.state &&
+  !!ctx.entity &&
+  !ctx.entity.hidden &&
+  !OTHER_DEVICES_HIDDEN_PLATFORMS.includes(ctx.entity.platform) &&
+  !OTHER_DEVICES_HIDDEN_DOMAINS.includes(ctx.domain);
