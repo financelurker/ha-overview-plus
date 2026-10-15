@@ -7,6 +7,7 @@ const FULL = {
   favorite_entities: ["light.lamp"],
   debug: true,
   load_home_settings: false,
+  strip_area_names: false,
   card_rules: [
     { match: { integration: "better_thermostat", domain: "climate" }, card: { type: "custom:bt" } },
     { match: { entity: "climate.bath" }, card: { name: "Bath", icon: "mdi:bathtub" } },

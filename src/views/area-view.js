@@ -16,7 +16,7 @@ import { createCardFactory } from "../card-factory.js";
 import { findEntities, simpleFilter, SUMMARY_FILTERS, SUMMARY_ICONS } from "../entity-filter.js";
 import { t } from "../i18n.js";
 import { matches } from "../matcher.js";
-import { areaEntities, deviceClass, deviceName, entityCategory, supportsFeature } from "../registry.js";
+import { areaEntities, deviceClass, deviceName, displayName, entityCategory, stripAreaName, supportsFeature } from "../registry.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
 
@@ -51,6 +51,7 @@ import { areaEntities, deviceClass, deviceName, entityCategory, supportsFeature 
  * @typedef {Object} AreaViewOptions
  * @property {any[]} [card_rules]
  * @property {AreaOverride} [override]
+ * @property {boolean} [strip_area_names]       default true: remove the area name from card names
  */
 
 const LIGHT_BRIGHTNESS_MODES = ["brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww", "white"];
@@ -190,9 +191,24 @@ export function generateAreaView(hass, areaId, options = {}) {
    * @param {EntityContext} ctx
    * @param {Record<string, any>} [extra]
    */
+  const stripNames = options.strip_area_names !== false;
   const card = (factory, ctx, extra = {}) => {
-    const result = factory.entity(ctx, { ...defaultEntityCard(ctx), ...extra });
+    /** @type {Record<string, any>} */
+    const base = { ...defaultEntityCard(ctx), ...extra };
+    // The area is the context of the whole view: drop its name from the card name,
+    // e.g. "Living room Ceiling light" → "Ceiling light"
+    let shortName;
+    if (stripNames && base.show_name !== false) {
+      const shown = displayName(hass, ctx, base.name);
+      const stripped = stripAreaName(shown, area);
+      if (stripped !== shown) shortName = stripped;
+    }
+    const result = factory.entity(ctx, shortName ? { ...base, name: shortName } : base);
     if (!result) report.hidden.push(ctx.entity_id);
+    // A replacement card from a rule gets the short name too, unless the rule sets one
+    else if (shortName && result.name === undefined && result.entity === ctx.entity_id && result.show_name !== false) {
+      result.name = shortName;
+    }
     return result;
   };
   /** @param {(Record<string, any> | null | undefined)[]} cards */
@@ -239,7 +255,7 @@ export function generateAreaView(hass, areaId, options = {}) {
       for (const ctx of all) if (ctx.device && claimedDevices.has(ctx.device.id)) consumed.add(ctx.entity_id);
 
       const shown = matched.filter(selectionFilter(section.entities));
-      const built = buildOverrideSection(hass, section, shown, highlight, card, compact);
+      const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined);
       report.sections.push({
         title: section.title ?? `#${index + 1}`,
         layout: section.layout ?? "tiles",
@@ -403,9 +419,10 @@ export function generateAreaView(hass, areaId, options = {}) {
  * @param {ReturnType<typeof createCardFactory>} factory
  * @param {(f: ReturnType<typeof createCardFactory>, ctx: EntityContext, extra?: Record<string, any>) => Record<string, any> | null} card
  * @param {(cards: (Record<string, any> | null | undefined)[]) => Record<string, any>[]} compact
+ * @param {any} [stripArea] area whose name is removed from device names (compact layout)
  * @returns {Record<string, any>[]}
  */
-function buildOverrideSection(hass, section, shown, factory, card, compact) {
+function buildOverrideSection(hass, section, shown, factory, card, compact, stripArea) {
   if (!shown.length) return [];
   const layout = section.layout ?? "tiles";
   const title = headingCard(section.title ?? "", section.icon);
@@ -460,7 +477,7 @@ function buildOverrideSection(hass, section, shown, factory, card, compact) {
     const primary = primaryEntity(entities, section.primary);
     if (!primary) return [];
     return [card(factory, primary, {
-      name: deviceName(device) || t(hass, "unnamed_device"),
+      name: stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device"),
       ...(hass.user?.is_admin ? { tap_action: navigate(`/config/devices/device/${device.id}`) } : {}),
     })];
   });

@@ -21,7 +21,7 @@
  */
 
 /** Keys of the strategy config managed by the form. */
-const MANAGED = ["load_home_settings", "debug", "card_rules", "area_overrides"];
+const MANAGED = ["load_home_settings", "strip_area_names", "debug", "card_rules", "area_overrides"];
 
 /** Selection criteria editable as fields (all accept one or more values). */
 export const MATCH_FIELDS = [
@@ -227,6 +227,7 @@ export function toForm(config) {
   const overrides = isPlainObject(config.area_overrides) ? config.area_overrides : {};
   return {
     load_home_settings: config.load_home_settings !== false,
+    strip_area_names: config.strip_area_names !== false,
     debug: config.debug === true,
     rules: (Array.isArray(config.card_rules) ? config.card_rules : []).map(ruleToForm),
     areas: Object.entries(overrides).map(([area, o]) => {
@@ -254,6 +255,7 @@ export function fromForm(form, original) {
   const config = Object.fromEntries(Object.entries(original).filter(([k]) => !MANAGED.includes(k)));
 
   if (form.load_home_settings === false) config.load_home_settings = false;
+  if (form.strip_area_names === false) config.strip_area_names = false;
   if (form.debug === true) config.debug = true;
   const rules = (Array.isArray(form.rules) ? form.rules : []).map(formToRule);
   if (rules.length) config.card_rules = rules;
