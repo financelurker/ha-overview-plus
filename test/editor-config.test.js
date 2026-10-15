@@ -32,7 +32,8 @@ const FULL = {
         { title: "Either", match: [{ domain: "light" }, { domain: "switch" }], primary: { domain: "sensor", not: { device_class: "x" } } },
       ],
     },
-    truenas: { badges: ["sensor.pool_usage"], show_automations: false },
+    truenas: { badges: ["sensor.pool_usage"], show_automations: false, tile: { sensor_classes: [], alert_classes: ["problem"], color: "blue", name: "NAS", aspect_ratio: "1" } },
+    network: { tile: { alert_classes: ["connectivity"] } },
   },
 };
 
@@ -160,4 +161,14 @@ test("a device rule cannot adjust a card: it is stored as replace", () => {
   const form = toForm({});
   form.rules.push({ r_action: "adjust", r_scope: "device", r_type: "entities", m_label: ["x"] });
   assert.deepEqual(fromForm(form, {}).card_rules, [{ match: { label: "x" }, scope: "device", card: { type: "entities" } }]);
+});
+
+test("area tile options: default vs selected sensor classes", () => {
+  const form = toForm({});
+  form.areas.push({ area: "a", badges: "default", t_sensors: "custom", t_sensor_classes: [], t_alert_classes: [], sections: [] });
+  form.areas.push({ area: "b", badges: "default", t_sensors: "default", t_sensor_classes: ["power"], t_alert_classes: ["running"], sections: [] });
+  assert.deepEqual(fromForm(form, {}).area_overrides, {
+    a: { tile: { sensor_classes: [] } },
+    b: { tile: { alert_classes: ["running"] } },
+  });
 });

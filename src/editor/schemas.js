@@ -204,7 +204,7 @@ export function ruleSchema(ctx, opts, rule) {
       schema: matchSchema(ctx, opts, rule, { label: true, area: true }) },
     { name: "", type: "expandable", flatten: true, title: ctx.t("editor_rule_scope"), schema: [
       { name: "r_scope", required: true, selector: { select: { mode: "dropdown", options: choice(["entity", "device"], "editor_scope_") } } },
-      { name: "r_contexts", selector: { select: { mode: "dropdown", multiple: true, options: choice(["area", "area_other"], "editor_context_") } } },
+      { name: "r_contexts", selector: { select: { mode: "dropdown", multiple: true, options: choice(["favorites", "area", "area_other"], "editor_context_") } } },
       { name: "r_stop", selector: { boolean: {} } },
     ] },
   ];

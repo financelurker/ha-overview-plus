@@ -232,10 +232,17 @@ export function toForm(config) {
     debug: config.debug === true,
     rules: (Array.isArray(config.card_rules) ? config.card_rules : []).map(ruleToForm),
     areas: Object.entries(overrides).map(([area, o]) => {
-      const { sections, badges, show_other_devices, show_automations, ...rest } = isPlainObject(o) ? o : {};
+      const { sections, badges, show_other_devices, show_automations, tile, ...rest } = isPlainObject(o) ? o : {};
+      const { sensor_classes, alert_classes, color, name, ...tileExtra } = isPlainObject(tile) ? tile : {};
       return {
         ...rest,
         area,
+        t_sensors: sensor_classes === undefined ? "default" : "custom",
+        t_sensor_classes: toList(sensor_classes),
+        t_alert_classes: toList(alert_classes),
+        t_color: color,
+        t_name: name,
+        tile_extra: tileExtra,
         badges: badges === false ? "none" : Array.isArray(badges) ? "custom" : "default",
         badge_entities: Array.isArray(badges) ? [...badges] : [],
         show_other_devices: show_other_devices !== false,
@@ -266,9 +273,19 @@ export function fromForm(form, original) {
   const overrides = {};
   for (const entry of Array.isArray(form.areas) ? form.areas : []) {
     if (!entry?.area) continue;
-    const { area, badges, badge_entities, show_other_devices, show_automations, sections, ...rest } = entry;
+    const {
+      area, badges, badge_entities, show_other_devices, show_automations, sections,
+      t_sensors, t_sensor_classes, t_alert_classes, t_color, t_name, tile_extra, ...rest
+    } = entry;
     /** @type {Record<string, any>} */
     const o = { ...rest };
+    /** @type {Record<string, any>} */
+    const tile = { ...(isPlainObject(tile_extra) ? tile_extra : {}) };
+    if (t_sensors === "custom") tile.sensor_classes = [...(t_sensor_classes || [])];
+    if (t_alert_classes?.length) tile.alert_classes = [...t_alert_classes];
+    if (t_color) tile.color = t_color;
+    if (t_name) tile.name = t_name;
+    if (Object.keys(tile).length) o.tile = tile;
     if (badges === "none") o.badges = false;
     else if (badges === "custom") o.badges = [...(badge_entities || [])];
     if (show_other_devices === false) o.show_other_devices = false;

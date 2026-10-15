@@ -85,6 +85,11 @@ export async function ensureHaForm() {
 /** @param {any} v */
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
+/** Sensor classes the area card can show (aggregated per area). */
+const TILE_SENSOR_CLASSES = ["temperature", "humidity", "power", "energy", "current", "apparent_power", "reactive_power", "gas", "water", "volume", "monetary"];
+/** Binary sensor classes the area card can show as alert icons. */
+const TILE_ALERT_CLASSES = ["motion", "occupancy", "presence", "moisture", "door", "window", "opening", "problem", "smoke", "gas", "safety", "running", "connectivity", "update"];
+
 /** @param {any} v */
 const filled = (v) => v !== undefined && v !== null && v !== "" && JSON.stringify(v) !== "{}" && JSON.stringify(v) !== "[]";
 
@@ -101,6 +106,9 @@ const newAreaEntry = (area) => ({
   badge_entities: [],
   show_other_devices: true,
   show_automations: true,
+  t_sensors: "default",
+  t_sensor_classes: [],
+  t_alert_classes: [],
   sections: [],
 });
 
@@ -463,9 +471,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
 
     const options = this._haForm(this._optionsSchema(entry), this._optionsData(entry), (v) => {
-      const badgesChanged = v.badges !== entry.badges;
+      const shapeChanged = v.badges !== entry.badges || (v.t_sensors ?? "default") !== (entry.t_sensors ?? "default");
       Object.assign(entry, v);
-      if (badgesChanged) options.schema = this._optionsSchema(entry);
+      if (shapeChanged) options.schema = this._optionsSchema(entry);
       refreshHeader();
       this._emit();
     });
@@ -505,12 +513,20 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       badge_entities: entry.badge_entities,
       show_other_devices: entry.show_other_devices,
       show_automations: entry.show_automations,
+      t_sensors: entry.t_sensors ?? "default",
+      t_sensor_classes: entry.t_sensor_classes,
+      t_alert_classes: entry.t_alert_classes,
+      t_color: entry.t_color,
+      t_name: entry.t_name,
     };
   }
 
   /** @param {any} entry */
   _optionsSchema(entry) {
     const badgeOptions = ["default", "none", "custom"].map((value) => ({ value, label: this._t(`editor_badges_${value}`) }));
+    const sensorModes = ["default", "custom"].map((value) => ({ value, label: this._t(`editor_t_sensors_${value}`) }));
+    /** @param {string[]} values */
+    const classes = (values) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options: values.map((v) => ({ value: v, label: v })) } });
     return [
       { name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } },
       ...(entry.badges === "custom" ? [{ name: "badge_entities", selector: { entity: { multiple: true } } }] : []),
@@ -518,6 +534,18 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         { name: "show_other_devices", selector: { boolean: {} } },
         { name: "show_automations", selector: { boolean: {} } },
       ] },
+      {
+        name: "", type: "expandable", flatten: true, title: this._t("editor_tile"),
+        schema: [
+          { name: "", type: "grid", schema: [
+            { name: "t_name", selector: { text: {} } },
+            { name: "t_color", selector: { ui_color: {} } },
+          ] },
+          { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
+          ...((entry.t_sensors ?? "default") === "custom" ? [{ name: "t_sensor_classes", selector: classes(TILE_SENSOR_CLASSES) }] : []),
+          { name: "t_alert_classes", selector: classes(TILE_ALERT_CLASSES) },
+        ],
+      },
     ];
   }
 
