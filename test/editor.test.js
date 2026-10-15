@@ -310,3 +310,15 @@ test("tile with selected entities: entity fields only in that mode", () => {
     entities: ["sensor.pve_cpu"], show_names: true, alert_entities: ["binary_sensor.vm_db_status"],
   });
 });
+
+test("rule summary names every criterion, exclusions included", async () => {
+  const { matchSummary } = await import("../src/editor/schemas.js");
+  const h = makeHass();
+  const ctx = { hass: h, t: (/** @type {string} */ k, /** @type {any} */ p) => (k === "editor_summary_not" ? `not ${p.values}` : k) };
+  assert.equal(matchSummary(ctx, { m_entity_category: ["diagnostic"] }), "diagnostic");
+  assert.equal(
+    matchSummary(ctx, { m_domain: ["sensor"], m_not_entity_category: ["config"], m_not_domain: ["button"] }),
+    "sensor · not button · not config"
+  );
+  assert.equal(matchSummary(ctx, {}), "");
+});
