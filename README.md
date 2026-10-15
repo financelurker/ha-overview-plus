@@ -161,13 +161,41 @@ strategy:
 - Rules are evaluated in order and **all** matching rules apply. A `card` with a different `type`
   replaces the card, a `card` without `type` is merged into it, `card: false` hides the entity.
   `stop: true` ends the evaluation for that entity.
-- `entity` is set automatically unless the card uses the `$entity` placeholder.
+- `entity` is set automatically unless the card uses the `$entity` placeholder. A rule with `tap`
+  may leave out `card`.
   Placeholders: `$entity`, `$device`, `$area`, and `$entities` (device scope, list of entity ids).
 - `contexts` limits where a rule applies: `favorites` (favorites and suggested entities on the
   overview page), `area` (highlighted sections of an area view), `area_other` (remaining devices of
   an area view), `media` (media players view), `devices` (devices view). In the devices view every
   device is one entities card: device rules replace it, entity rules can only hide rows.
 - `scope: device` turns all entities of a matching device into one card (first matching rule wins).
+
+#### Popup on tap
+
+A rule can show a card of your choice in a popup instead of the entity's info dialog
+(*On tap → Card in a popup* in the editor). This works with any card that opens the info dialog
+when tapped – tiles, buttons, most custom cards – and also for rules that do not replace the card:
+
+```yaml
+  card_rules:
+    # Small card in favorites and area views, the full card when tapped
+    - match: { integration: better_thermostat, domain: climate }
+      contexts: [favorites, area]
+      card: { type: custom:my-mini-thermostat-card }
+      tap:
+        popup: { type: custom:better-thermostat-ui-card }
+    # Keep the default tile, but show cover controls when tapped
+    - match: { domain: cover }
+      tap:
+        popup:
+          type: tile
+          features: [{ type: cover-open-close }, { type: cover-position }]
+```
+
+- `entity` of the popup card is set to the tapped entity; use `$entity` to place it yourself
+  (e.g. `entities: [$entity, sensor.x]`). `$device`, `$area` and `$entities` work as in `card`.
+- The popup has a button for the regular info dialog. On phones it fills the screen.
+- The popup of the last matching rule applies; `tap: false` removes it again.
 
 ### Area overrides
 

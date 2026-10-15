@@ -92,7 +92,7 @@ const filled = (v) => v !== undefined && v !== null && v !== "" && JSON.stringif
 const sectionShape = (s) => [(s.layout ?? "tiles") === "compact", filled(s.m_yaml), filled(s.e_yaml), filled(s.p_yaml)].join();
 
 /** Things that change which fields a rule form shows. @param {any} r */
-const ruleShape = (r) => [r.r_action || "replace", r.r_scope || "entity", filled(r.m_yaml)].join();
+const ruleShape = (r) => [r.r_action || "replace", r.r_scope || "entity", r.r_tap || "default", filled(r.m_yaml)].join();
 
 /** @param {string} area */
 const newAreaEntry = (area) => ({
@@ -348,7 +348,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const ruleActions = document.createElement("div");
     ruleActions.className = "row left rule-actions";
     ruleActions.append(this._button(this._t("editor_add_rule"), () => {
-      this._form.rules.push({ r_action: "replace", r_scope: "entity" });
+      this._form.rules.push({ r_action: "replace", r_scope: "entity", r_tap: "default" });
       this._openRules.add(this._form.rules.length - 1);
       this._renderRules();
       this._emit();
@@ -637,6 +637,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     let header = this._t(`editor_action_${action}`);
     if (action === "replace" && rule.r_type) header += `: ${rule.r_type}`;
     if (action === "adjust" && rule.r_name) header += `: ${rule.r_name}`;
+    if (action !== "hide" && rule.r_tap === "popup" && rule.r_popup_type) {
+      header += ` · ${this._t("editor_rule_popup", { type: rule.r_popup_type })}`;
+    }
     const selection = matchSummary(this._ctx(), rule) || this._t("editor_all_entities");
     return { header: `${index + 1}. ${header}`, secondary: selection };
   }

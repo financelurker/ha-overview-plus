@@ -173,3 +173,28 @@ test("area tile options: default vs selected sensor classes", () => {
     b: { tile: { alert_classes: ["running"] } },
   });
 });
+
+test("popup on tap: form fields and round trip", () => {
+  const config = {
+    card_rules: [
+      { match: { domain: "climate" }, card: { type: "custom:mini" }, tap: { popup: { type: "thermostat", features: [] } } },
+      { match: { domain: "light" }, tap: { popup: { type: "light" } } },
+      { match: { domain: "fan" }, tap: false },
+    ],
+  };
+  const form = toForm(config);
+  assert.deepEqual([form.rules[0].r_tap, form.rules[0].r_popup_type, form.rules[0].r_popup_options], ["popup", "thermostat", { features: [] }]);
+  assert.deepEqual([form.rules[1].r_action, form.rules[1].r_tap], ["adjust", "popup"]);
+  assert.equal(form.rules[2].r_tap, "default");
+  assert.deepEqual(fromForm(form, config), config);
+});
+
+test("choosing a popup in the form", () => {
+  const form = toForm({});
+  form.rules.push({ r_action: "adjust", r_scope: "entity", r_tap: "popup", r_popup_type: "thermostat", m_domain: ["climate"] });
+  form.rules.push({ r_action: "replace", r_type: "tile", r_scope: "entity", r_tap: "default", r_popup_type: "ignored", m_domain: ["light"] });
+  assert.deepEqual(fromForm(form, {}).card_rules, [
+    { match: { domain: "climate" }, tap: { popup: { type: "thermostat" } } },
+    { match: { domain: "light" }, card: { type: "tile" } },
+  ]);
+});
