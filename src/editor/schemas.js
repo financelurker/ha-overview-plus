@@ -8,7 +8,7 @@
  * list are stored as exact patterns (^…$), typed values are kept as entered.
  */
 
-import { domainOf } from "../registry.js";
+import { domainOf, entityContext } from "../registry.js";
 
 const LAYOUTS = ["tiles", "devices", "compact", "table"];
 const CATEGORIES = ["none", "diagnostic", "config"];
@@ -238,4 +238,31 @@ export function matchSummary(ctx, data) {
     if (Array.isArray(values) && values.length) parts.push(values.map(fmt).join(", "));
   }
   return parts.join(" · ");
+}
+
+/**
+ * Device classes the area tile can show for an area, like Home Assistant's own area card
+ * editor offers them: classes of the area's regular (non-diagnostic) sensors and binary
+ * sensors. Values already configured stay selectable.
+ * @param {any} hass
+ * @param {string} areaId
+ * @param {string[]} [currentSensor]
+ * @param {string[]} [currentAlert]
+ */
+export function areaTileClassOptions(hass, areaId, currentSensor = [], currentAlert = []) {
+  /** @type {Set<string>} */
+  const sensor = new Set(currentSensor);
+  /** @type {Set<string>} */
+  const alert = new Set(currentAlert);
+  for (const id of Object.keys(hass.states || {})) {
+    const ctx = entityContext(hass, id);
+    if (ctx.area?.area_id !== areaId || ctx.entity?.hidden || ctx.entity?.entity_category) continue;
+    const dc = ctx.state?.attributes?.device_class;
+    if (!dc) continue;
+    if (ctx.domain === "sensor") sensor.add(dc);
+    else if (ctx.domain === "binary_sensor") alert.add(dc);
+  }
+  /** @param {Set<string>} set */
+  const toOptions = (set) => [...set].sort().map((value) => ({ value, label: value }));
+  return { sensor: toOptions(sensor), alert: toOptions(alert) };
 }

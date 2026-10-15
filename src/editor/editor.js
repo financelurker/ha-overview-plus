@@ -20,7 +20,7 @@
  */
 
 import { fromForm, toForm } from "./editor-config.js";
-import { collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
+import { areaTileClassOptions, collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
 export const EDITOR_TAG = "overview-plus-strategy-editor";
@@ -84,11 +84,6 @@ export async function ensureHaForm() {
 
 /** @param {any} v */
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
-
-/** Sensor classes the area card can show (aggregated per area). */
-const TILE_SENSOR_CLASSES = ["temperature", "humidity", "power", "energy", "current", "apparent_power", "reactive_power", "gas", "water", "volume", "monetary"];
-/** Binary sensor classes the area card can show as alert icons. */
-const TILE_ALERT_CLASSES = ["motion", "occupancy", "presence", "moisture", "door", "window", "opening", "problem", "smoke", "gas", "safety", "running", "connectivity", "update"];
 
 /** @param {any} v */
 const filled = (v) => v !== undefined && v !== null && v !== "" && JSON.stringify(v) !== "{}" && JSON.stringify(v) !== "[]";
@@ -525,8 +520,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _optionsSchema(entry) {
     const badgeOptions = ["default", "none", "custom"].map((value) => ({ value, label: this._t(`editor_badges_${value}`) }));
     const sensorModes = ["default", "custom"].map((value) => ({ value, label: this._t(`editor_t_sensors_${value}`) }));
-    /** @param {string[]} values */
-    const classes = (values) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options: values.map((v) => ({ value: v, label: v })) } });
+    const tileClasses = areaTileClassOptions(this._hass, entry.area, entry.t_sensor_classes, entry.t_alert_classes);
+    /** @param {{ value: string, label: string }[]} options */
+    const classes = (options) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options } });
     return [
       { name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } },
       ...(entry.badges === "custom" ? [{ name: "badge_entities", selector: { entity: { multiple: true } } }] : []),
@@ -542,8 +538,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
             { name: "t_color", selector: { ui_color: {} } },
           ] },
           { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
-          ...((entry.t_sensors ?? "default") === "custom" ? [{ name: "t_sensor_classes", selector: classes(TILE_SENSOR_CLASSES) }] : []),
-          { name: "t_alert_classes", selector: classes(TILE_ALERT_CLASSES) },
+          ...((entry.t_sensors ?? "default") === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
+          { name: "t_alert_classes", selector: classes(tileClasses.alert) },
         ],
       },
     ];
