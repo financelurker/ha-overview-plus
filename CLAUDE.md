@@ -43,3 +43,4 @@ card is correct on the first render (no flicker from lazy-loaded built-in module
 - `npm run check` – type-check the JS sources
 - `npm test` – run the unit tests (node:test, fake `hass` in `test/fixtures.js`)
 - `npm run build` – bundle to `dist/overview-plus.js`
+- `npm run bench` – time area view generation for a large fake installation
