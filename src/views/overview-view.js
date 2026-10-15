@@ -11,6 +11,7 @@
  *   - per-area options for the area tiles (`area_overrides.<area>.tile`)
  */
 
+import { AREA_TILE_TYPE } from "../area-tile-card.js";
 import { createCardFactory } from "../card-factory.js";
 import { findEntities, isOtherDeviceEntity, simpleFilter, SUMMARY_FILTERS } from "../entity-filter.js";
 import { t } from "../i18n.js";
@@ -142,7 +143,9 @@ export function favoriteCard(entityId) {
 }
 
 /**
- * Area tile; `tile` options from area_overrides are merged in.
+ * Area tile; `tile` options from area_overrides are merged in. With selected entities
+ * (`tile.entities` / `tile.alert_entities`) the Overview Plus area tile is used, since
+ * the area card can only show values combined by device class.
  * @param {any} hass
  * @param {string} areaId
  * @param {Record<string, any> | undefined} tile
@@ -159,7 +162,13 @@ function areaCard(hass, areaId, tile) {
     vertical: true,
     grid_options: { rows: 2, columns: 4 },
   };
-  return tile && typeof tile === "object" ? { ...card, ...tile, type: "area", area: areaId } : card;
+  if (!tile || typeof tile !== "object") return card;
+  const custom = (Array.isArray(tile.entities) && tile.entities.length) || (Array.isArray(tile.alert_entities) && tile.alert_entities.length);
+  if (custom) {
+    const { display_type: _d, sensor_classes: _s, ...base } = card;
+    return { ...base, ...tile, type: AREA_TILE_TYPE, area: areaId };
+  }
+  return { ...card, ...tile, type: "area", area: areaId };
 }
 
 // ---------------------------------------------------------------- generator

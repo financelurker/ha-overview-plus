@@ -172,6 +172,19 @@ strategy:
 `tile` options are merged into the area card on the overview page; any option of the area card
 can be used. An area can have a `tile` without `sections` – its area view then stays the default.
 
+The area card can only show values combined by device class (e.g. the median temperature of the
+area). To show specific entities instead – also diagnostic sensors and sensors without device
+class – list them under `tile.entities`; the tile then uses Overview Plus' own area tile, which
+looks like the compact area card:
+
+```yaml
+      tile:
+        entities: [sensor.pve_cpu, sensor.pve_memory]   # shown in this order
+        show_names: true                                 # "CPU 12 % · RAM 41 %"
+        alert_entities: [binary_sensor.vm_db_running]    # badge while one of them is on
+        alert_classes: [problem]
+```
+
 When an area has `sections`, the standard categories (lights, climate, security, media players,
 scenes) are not built. The configured sections are shown in order, followed by all remaining devices
 of the area and its automations, as in the default view.
