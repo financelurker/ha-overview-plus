@@ -9,7 +9,8 @@
  * Form shape:
  *   load_home_settings: boolean
  *   debug: boolean
- *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_scope, r_contexts, r_stop, m_* }]
+ *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_tap, r_popup_type, r_popup_options,
+ *            r_scope, r_contexts, r_stop, m_* }]
  *   areas: [{
  *     area, badges: "default" | "none" | "custom", badge_entities, show_other_devices, show_automations,
  *     sections: [{ title, icon, layout, m_*, e_*, p_* }]
@@ -174,10 +175,24 @@ function formToSection(form) {
 
 /** @param {any} rule */
 function ruleToForm(rule) {
-  const { match, card, scope, contexts, stop, ...rest } = isPlainObject(rule) ? rule : {};
+  const { match, card, scope, contexts, stop, tap, ...rest } = isPlainObject(rule) ? rule : {};
   /** @type {Record<string, any>} */
   const form = { ...rest, ...matchToFields(match) };
-  if (card === false) {
+  const popup = isPlainObject(tap) && Object.keys(tap).length === 1 && isPlainObject(tap.popup) && typeof tap.popup.type === "string"
+    ? tap.popup
+    : undefined;
+  if (popup) {
+    const { type, ...options } = popup;
+    form.r_tap = "popup";
+    form.r_popup_type = type;
+    if (Object.keys(options).length) form.r_popup_options = options;
+  } else {
+    form.r_tap = "default";
+    if (tap !== undefined) form.tap = tap; // a form cannot show it: kept as it is
+  }
+  if (card === undefined && tap !== undefined) {
+    form.r_action = "adjust";
+  } else if (card === false) {
     form.r_action = "hide";
   } else {
     const { type, ...cardRest } = isPlainObject(card) ? card : {};
@@ -207,11 +222,16 @@ function formToRule(form) {
   if (action === "hide") {
     rule.card = false;
   } else {
-    rule.card = dropEmpty({
+    const card = dropEmpty({
       ...(action === "replace" && form.r_type ? { type: form.r_type } : {}),
       ...(isPlainObject(form.r_options) ? form.r_options : {}),
       ...Object.fromEntries(CARD_FIELDS.map((k) => [k, form[`r_${k}`]])),
     });
+    if (form.r_tap === "popup" && form.r_popup_type) {
+      rule.tap = { popup: { type: form.r_popup_type, ...(isPlainObject(form.r_popup_options) ? form.r_popup_options : {}) } };
+    }
+    // A rule that only sets the popup leaves the card as it is
+    if (Object.keys(card).length || rule.tap === undefined) rule.card = card;
   }
   if (form.r_stop === true) rule.stop = true;
   return rule;

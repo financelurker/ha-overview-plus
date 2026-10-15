@@ -199,6 +199,12 @@ export function ruleSchema(ctx, opts, rule) {
       { name: "r_color", selector: { ui_color: {} } },
       { name: "", type: "expandable", flatten: true, title: ctx.t("editor_card_options"),
         schema: [{ name: "r_options", selector: { object: {} } }] },
+      { name: "r_tap", required: true, selector: { select: { mode: "dropdown", options: choice(["default", "popup"], "editor_tap_") } } },
+      ...(rule.r_tap === "popup" ? [
+        { name: "r_popup_type", required: true, selector: pick(opts.cardTypes, false) },
+        { name: "", type: "expandable", flatten: true, title: ctx.t("editor_r_popup_options"),
+          schema: [{ name: "r_popup_options", selector: { object: {} } }] },
+      ] : []),
     ] : []),
     { name: "", type: "expandable", flatten: true, expanded: true, title: ctx.t("editor_applies_to"),
       schema: matchSchema(ctx, opts, rule, { label: true, area: true }) },
