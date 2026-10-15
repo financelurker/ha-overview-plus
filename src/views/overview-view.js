@@ -12,7 +12,7 @@
  */
 
 import { createCardFactory } from "../card-factory.js";
-import { findEntities, simpleFilter, SUMMARY_FILTERS } from "../entity-filter.js";
+import { findEntities, isOtherDeviceEntity, simpleFilter, SUMMARY_FILTERS } from "../entity-filter.js";
 import { t } from "../i18n.js";
 import { domainOf, entityContext, entityCategory } from "../registry.js";
 
@@ -36,13 +36,6 @@ const SMALL_SCREEN = { condition: "view_columns", max: 1 };
 const MAINTENANCE_FILTERS = [
   { domain: "sensor", device_class: ["battery"] },
   { domain: "binary_sensor", device_class: ["battery"] },
-];
-
-const OTHER_DEVICES_HIDDEN_PLATFORMS = ["automation", "script", "hassio", "backup", "mobile_app", "zone", "person"];
-const OTHER_DEVICES_HIDDEN_DOMAINS = [
-  "ai_task", "automation", "configurator", "device_tracker", "event", "geo_location", "notify",
-  "persistent_notification", "script", "sun", "tag", "todo", "zone",
-  "assist_satellite", "conversation", "stt", "tts",
 ];
 
 const DEFAULT_SUMMARY_KEYS = ["light", "climate", "security", "media_players", "maintenance", "weather", "energy"];
@@ -187,16 +180,8 @@ export async function generateOverviewView(hass, options = {}) {
   const floorCount = home.floors.length + (home.areas.length ? 1 : 0);
 
   // ---------------------------------------------------------- areas by floor
-  const hasOtherDevices = all.some(
-    (ctx) =>
-      !ctx.area &&
-      !ctx.entity?.hidden &&
-      !!ctx.entity &&
-      !OTHER_DEVICES_HIDDEN_PLATFORMS.includes(ctx.entity.platform) &&
-      !OTHER_DEVICES_HIDDEN_DOMAINS.includes(ctx.domain) &&
-      entityCategory(ctx) === "none" &&
-      !!ctx.device
-  );
+  // Only show the devices tile if the devices view has content
+  const hasOtherDevices = all.some((ctx) => isOtherDeviceEntity(ctx) && entityCategory(ctx) === "none" && !!ctx.device);
 
   /** @type {Record<string, any>[]} */
   const floorsSections = [];
