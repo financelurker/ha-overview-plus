@@ -88,3 +88,55 @@ export const areaEntities = (hass, areaId) =>
  */
 export const supportsFeature = (state, feature) =>
   ((state?.attributes?.supported_features ?? 0) & feature) !== 0;
+
+const SEPARATORS = "[\\s\\-–—:·|/_,.]+";
+
+/** @param {string} s */
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Remove an area name (or one of its aliases) from the start or end of a name,
+ * together with the separator next to it. Case-insensitive. Returns the name
+ * unchanged if nothing would be left.
+ * Example: "Wohnzimmer Deckenlicht" in area "Wohnzimmer" → "Deckenlicht".
+ * @param {string} name
+ * @param {any} area area registry entry
+ * @returns {string}
+ */
+export function stripAreaName(name, area) {
+  if (!name || !area) return name;
+  const names = [area.name, ...(area.aliases || [])].filter(Boolean).sort((a, b) => b.length - a.length);
+  for (const areaName of names) {
+    const a = escapeRegex(String(areaName).trim());
+    if (!a) continue;
+    const stripped = name
+      .replace(new RegExp(`^${a}(?:${SEPARATORS}|$)`, "i"), "")
+      .replace(new RegExp(`(?:^|${SEPARATORS})${a}$`, "i"), "")
+      .trim();
+    if (stripped && stripped !== name.trim()) return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+  }
+  return name;
+}
+
+/**
+ * The name a card shows for an entity, computed like the tile card does
+ * (hass.formatEntityName with the card's name config).
+ * @param {any} hass
+ * @param {EntityContext} ctx
+ * @param {any} [nameConfig] the card's `name` option
+ * @returns {string}
+ */
+export function displayName(hass, ctx, nameConfig) {
+  if (typeof nameConfig === "string") return nameConfig;
+  if (ctx.state && typeof hass.formatEntityName === "function") {
+    try {
+      const name = hass.formatEntityName(ctx.state, nameConfig);
+      if (name) return name;
+    } catch {
+      // fall through to the fallbacks below
+    }
+  }
+  const isEntityOnly = nameConfig && !Array.isArray(nameConfig) && nameConfig.type === "entity";
+  if (isEntityOnly && ctx.entity?.name) return ctx.entity.name;
+  return ctx.state?.attributes?.friendly_name || ctx.entity_id;
+}

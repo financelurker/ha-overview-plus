@@ -177,3 +177,65 @@ test("a device rule without card type is ignored instead of producing a broken c
   const section = view.sections.find((s) => s.cards[0].heading === "Coffee machine");
   assert.equal(section.cards[1].type, "tile");
 });
+
+// ---------------------------------------------------------------- area names
+import { stripAreaName } from "../src/registry.js";
+
+test("stripAreaName removes the area name at start or end, case-insensitive, incl. aliases", () => {
+  const area = { name: "Wohnzimmer", aliases: ["WZ"] };
+  assert.equal(stripAreaName("Wohnzimmer Deckenlicht", area), "Deckenlicht");
+  assert.equal(stripAreaName("wohnzimmer - deckenlicht", area), "Deckenlicht");
+  assert.equal(stripAreaName("Deckenlicht Wohnzimmer", area), "Deckenlicht");
+  assert.equal(stripAreaName("WZ: Stehlampe", area), "Stehlampe");
+  assert.equal(stripAreaName("Wohnzimmerlampe", area), "Wohnzimmerlampe", "only whole words");
+  assert.equal(stripAreaName("Licht Wohnzimmer Ecke", area), "Licht Wohnzimmer Ecke", "not in the middle");
+  assert.equal(stripAreaName("Wohnzimmer", area), "Wohnzimmer", "nothing left → unchanged");
+  assert.equal(stripAreaName("Proxmox (pve1)", { name: "Pro.mox" }), "Proxmox (pve1)", "area name is not a pattern");
+});
+
+function hassWithNames() {
+  const hass = makeHass();
+  // formatEntityName like the frontend: device name + entity name
+  hass.formatEntityName = (state, name) => {
+    const ent = hass.entities[state.entity_id];
+    const dev = ent?.device_id ? hass.devices[ent.device_id] : undefined;
+    const entityName = ent?.name;
+    if (name && !Array.isArray(name) && name.type === "entity") return entityName || dev?.name || state.entity_id;
+    return [dev?.name, entityName].filter(Boolean).join(" ") || state.entity_id;
+  };
+  hass.devices.dev_light.name = "Living room Ceiling";
+  hass.entities["light.lamp"].name = "Living room lamp";
+  hass.entities["switch.plug"].name = "Living Room Plug";
+  hass.devices.dev_vm_web.name = "Proxmox web";
+  return hass;
+}
+
+test("area views remove the area name from card names", () => {
+  const { view } = generateAreaView(hassWithNames(), "living_room");
+  const byEntity = (id) => cards(view).find((c) => c.entity === id);
+  assert.equal(byEntity("light.ceiling").name, "Ceiling");
+  assert.equal(byEntity("light.lamp").name, "Lamp");
+  assert.equal(byEntity("switch.plug").name, "Plug", "remaining devices (entity name only)");
+  assert.equal(byEntity("climate.living").name, undefined, "no area name → name left to the card");
+});
+
+test("replacement cards get the short name unless the rule sets one; option can be turned off", () => {
+  const hass = hassWithNames();
+  const rules = [
+    { match: { domain: "light", entity: "light.ceiling" }, card: { type: "custom:x" } },
+    { match: { entity: "light.lamp" }, card: { type: "custom:y", name: "Mine" } },
+  ];
+  const { view } = generateAreaView(hass, "living_room", { card_rules: rules });
+  assert.equal(cards(view).find((c) => c.entity === "light.ceiling").name, "Ceiling");
+  assert.equal(cards(view).find((c) => c.entity === "light.lamp").name, "Mine");
+
+  const off = generateAreaView(hass, "living_room", { strip_area_names: false }).view;
+  assert.equal(cards(off).find((c) => c.entity === "light.ceiling").name, undefined);
+});
+
+test("compact layout: device names without the area name", () => {
+  const { view } = generateAreaView(hassWithNames(), "proxmox", {
+    override: { sections: [{ title: "VMs", match: { label: "virt-guest" }, layout: "compact" }] },
+  });
+  assert.deepEqual(view.sections[0].cards.slice(1).map((c) => c.name), ["Web", "db"]);
+});

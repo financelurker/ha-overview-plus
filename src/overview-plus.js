@@ -20,7 +20,7 @@ export const VERSION = "0.0.0";
 const LOG = "[overview-plus]";
 
 /** Keys handled by Overview Plus; everything else is passed to the built-in overview view. */
-const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "debug"];
+const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "debug"];
 
 /** @type {readonly string[]} */
 const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
@@ -90,6 +90,7 @@ class OverviewPlusDashboardStrategy {
         area: area.area_id,
         card_rules: config.card_rules,
         override: overrides[area.area_id],
+        strip_area_names: config.strip_area_names,
         debug: config.debug,
       },
     }));
@@ -152,6 +153,7 @@ class OverviewPlusAreaViewStrategy {
       const { view, report } = generateAreaView(hass, config.area, {
         card_rules: config.card_rules,
         override: config.override,
+        strip_area_names: config.strip_area_names,
       });
       if (config.debug) {
         console.groupCollapsed(`${LOG} area view "${config.area}"`);
