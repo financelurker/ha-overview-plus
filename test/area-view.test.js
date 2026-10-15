@@ -191,6 +191,8 @@ test("stripAreaName removes the area name at start or end, case-insensitive, inc
   assert.equal(stripAreaName("Licht Wohnzimmer Ecke", area), "Licht Wohnzimmer Ecke", "not in the middle");
   assert.equal(stripAreaName("Wohnzimmer", area), "Wohnzimmer", "nothing left → unchanged");
   assert.equal(stripAreaName("Proxmox (pve1)", { name: "Pro.mox" }), "Proxmox (pve1)", "area name is not a pattern");
+  assert.equal(stripAreaName("Proxmox pve-01", { name: "Proxmox" }), "pve-01", "identifiers keep their case");
+  assert.equal(stripAreaName("Küche ölradiator", { name: "Küche" }), "Ölradiator");
 });
 
 function hassWithNames() {
@@ -238,4 +240,26 @@ test("compact layout: device names without the area name", () => {
     override: { sections: [{ title: "VMs", match: { label: "virt-guest" }, layout: "compact" }] },
   });
   assert.deepEqual(view.sections[0].cards.slice(1).map((c) => c.name), ["Web", "db"]);
+});
+
+test("device headings and table titles without the area name", () => {
+  const hass = hassWithNames();
+  hass.devices.dev_trv.name = "Living room Radiator";
+  hass.devices.dev_pve.name = "Proxmox pve1";
+  const living = generateAreaView(hass, "living_room").view;
+  assert.ok(headings(living).includes("Radiator"));
+  assert.ok(!headings(living).includes("Living room Radiator"));
+
+  const off = generateAreaView(hass, "living_room", { strip_area_names: false }).view;
+  assert.ok(headings(off).includes("Living room Radiator"));
+
+  const devicesLayout = generateAreaView(hass, "proxmox", {
+    override: { sections: [{ title: "Hypervisor", match: { label: "virt-hypervisor" }, layout: "devices" }] },
+  }).view;
+  assert.ok(headings(devicesLayout).includes("pve1"), "identifiers keep their case");
+
+  const table = generateAreaView(hass, "proxmox", {
+    override: { sections: [{ title: "Hypervisor", match: { label: "virt-hypervisor" }, layout: "table" }] },
+  }).view;
+  assert.equal(table.sections[0].cards[1].title, "pve1");
 });
