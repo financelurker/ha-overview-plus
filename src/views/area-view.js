@@ -345,7 +345,9 @@ export function generateAreaView(hass, areaId, options = {}) {
       const primary = entities.filter((ctx) => !battery(ctx) && entityCategory(ctx) === "none");
       if (!primary.length) continue;
 
-      const heading = device ? deviceName(device) || t(hass, "unnamed_device") : t(hass, "others");
+      const heading = device
+        ? (stripNames ? stripAreaName(deviceName(device), area) : deviceName(device)) || t(hass, "unnamed_device")
+        : t(hass, "others");
       const custom = device ? other.device(device, primary) : undefined;
       if (custom === null) continue;
       deviceSections.push({
@@ -419,7 +421,7 @@ export function generateAreaView(hass, areaId, options = {}) {
  * @param {ReturnType<typeof createCardFactory>} factory
  * @param {(f: ReturnType<typeof createCardFactory>, ctx: EntityContext, extra?: Record<string, any>) => Record<string, any> | null} card
  * @param {(cards: (Record<string, any> | null | undefined)[]) => Record<string, any>[]} compact
- * @param {any} [stripArea] area whose name is removed from device names (compact layout)
+ * @param {any} [stripArea] area whose name is removed from device names (headings, titles, compact tiles)
  * @returns {Record<string, any>[]}
  */
 function buildOverrideSection(hass, section, shown, factory, card, compact, stripArea) {
@@ -443,7 +445,7 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
         return [{
           type: "grid",
           cards: [
-            headingCard(device ? deviceName(device) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
+            headingCard(device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
               heading_style: "subtitle",
               tap_action: deviceTapAction(hass, device),
             }),
@@ -461,7 +463,7 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
       if (custom !== undefined) return custom;
       return {
         type: "entities",
-        title: device ? deviceName(device) || t(hass, "unnamed_device") : t(hass, "others"),
+        title: device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"),
         entities: entities.map((ctx) => ctx.entity_id),
       };
     });

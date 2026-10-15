@@ -113,7 +113,11 @@ export function stripAreaName(name, area) {
       .replace(new RegExp(`^${a}(?:${SEPARATORS}|$)`, "i"), "")
       .replace(new RegExp(`(?:^|${SEPARATORS})${a}$`, "i"), "")
       .trim();
-    if (stripped && stripped !== name.trim()) return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+    if (stripped && stripped !== name.trim()) {
+      // "Living room lamp" → "Lamp", but keep identifiers like hostnames as they are ("pve1")
+      const firstWord = stripped.split(/\s/)[0];
+      return /^[\p{L}]+$/u.test(firstWord) ? stripped.charAt(0).toUpperCase() + stripped.slice(1) : stripped;
+    }
   }
   return name;
 }

@@ -72,7 +72,7 @@ Favorites, shortcuts and alerts are taken from the settings of the built-in Over
 | `area_overrides` | Per-area layout, keyed by area id. |
 | `load_home_settings` | Use favorites/shortcuts of the built-in Overview (default `true`). |
 | `lazy_render` | Render cards below the first screen of an area view only when they scroll into view (default `true`). |
-| `strip_area_names` | Remove the area name from card names in area views, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
+| `strip_area_names` | Remove the area name from card names and device headings in area views, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
 | `debug` | Log the generated area views and the section assignment to the browser console. |
 
 ### Match specifications
