@@ -286,3 +286,13 @@ test("tile options: sensor classes only when 'selected sensor classes' is chosen
   edit(options, { t_sensor_classes: ["power"], t_alert_classes: ["problem"] });
   assert.deepEqual(last().area_overrides.proxmox.tile, { sensor_classes: ["power"], alert_classes: ["problem"] });
 });
+
+test("tile class options come from the area's own regular sensors, plus configured values", async () => {
+  const { areaTileClassOptions } = await import("../src/editor/schemas.js");
+  const hass = makeHass();
+  const living = areaTileClassOptions(hass, "living_room");
+  assert.deepEqual(living.sensor.map((o) => o.value), ["humidity", "temperature"], "battery/signal are diagnostic");
+  const proxmox = areaTileClassOptions(hass, "proxmox", ["power"], ["problem"]);
+  assert.deepEqual(proxmox.sensor.map((o) => o.value), ["power"], "only the configured value: no classified regular sensors");
+  assert.deepEqual(proxmox.alert.map((o) => o.value), ["problem", "running"]);
+});
