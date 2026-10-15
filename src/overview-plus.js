@@ -60,6 +60,63 @@ const errorView = (title, err) => ({
   cards: [{ type: "markdown", content: `**${title}**\n\n\`${String(/** @type {any} */ (err)?.message ?? err)}\`` }],
 });
 
+/**
+ * Number of cards in a generated view, by type.
+ * @param {any} view
+ */
+function cardStats(view) {
+  /** @type {Record<string, number>} */
+  const byType = {};
+  let total = 0;
+  for (const section of view.sections || [{ cards: view.cards || [] }]) {
+    for (const card of section.cards || []) {
+      if (card.type === "heading") continue;
+      byType[card.type] = (byType[card.type] || 0) + 1;
+      total++;
+    }
+  }
+  return { total, byType };
+}
+
+/**
+ * Debug: time from generating the view until the browser has painted it
+ * (two animation frames after the cards were created, measured from `start`).
+ * @param {string} area
+ * @param {number} start
+ */
+function measureRender(area, start) {
+  if (typeof requestAnimationFrame !== "function") return;
+  let lastCount = -1;
+  let stable = 0;
+  const tick = () => {
+    // The view is rendered once the number of card elements stops growing
+    const count = document.querySelector("home-assistant")?.shadowRoot ? countCards() : 0;
+    stable = count === lastCount ? stable + 1 : 0;
+    lastCount = count;
+    if (stable >= 3 || performance.now() - start > 10000) {
+      console.info(`${LOG} area view "${area}": visible after ${(performance.now() - start).toFixed(0)} ms (${count} card elements)`);
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+/** Count rendered card elements in the open view (walks shadow roots). */
+function countCards() {
+  let n = 0;
+  /** @param {Element | ShadowRoot} node */
+  const walk = (node) => {
+    node.querySelectorAll("*").forEach((el) => {
+      if (el.localName.startsWith("hui-") && el.localName.endsWith("-card")) n++;
+      if (el.shadowRoot) walk(el.shadowRoot);
+    });
+  };
+  const root = document.querySelector("home-assistant")?.shadowRoot;
+  if (root) walk(root);
+  return n;
+}
+
 /** @param {any} oldHass @param {any} newHass */
 const registryChanged = (oldHass, newHass) => REGISTRY_DEPS.some((k) => oldHass[k] !== newHass[k]);
 
@@ -150,16 +207,21 @@ class OverviewPlusAreaViewStrategy {
    */
   static async generate(config, hass) {
     try {
+      const start = performance.now();
       const { view, report } = generateAreaView(hass, config.area, {
         card_rules: config.card_rules,
         override: config.override,
         strip_area_names: config.strip_area_names,
       });
       if (config.debug) {
-        console.groupCollapsed(`${LOG} area view "${config.area}"`);
+        const ms = (performance.now() - start).toFixed(1);
+        const stats = cardStats(view);
+        const top = Object.entries(stats.byType).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}× ${k}`).join(", ");
+        console.groupCollapsed(`${LOG} area view "${config.area}": generated in ${ms} ms, ${stats.total} cards (${top})`);
         console.log("report", report);
         console.log("view", view);
         console.groupEnd();
+        measureRender(config.area, start);
       }
       return view;
     } catch (err) {
