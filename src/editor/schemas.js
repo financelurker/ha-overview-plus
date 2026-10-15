@@ -227,15 +227,23 @@ export function matchSummary(ctx, data) {
   const device = (id) => ctx.hass.devices?.[id]?.name_by_user || ctx.hass.devices?.[id]?.name || id;
   /** @param {string} p */
   const pattern = (p) => p.replace(/^\^/, "").replace(/\$$/, "").replace(/\\(.)/g, "$1");
+  /** @param {string} v */
+  const plain = (v) => v;
   /** @type {[string, (v: string) => string][]} */
   const keys = [
-    ["m_label", label], ["m_integration", (v) => v], ["m_domain", (v) => v], ["m_device_class", (v) => v],
-    ["m_manufacturer", pattern], ["m_model", pattern], ["m_device", device], ["m_entity", entity],
-    ["m_area", (id) => ctx.hass.areas?.[id]?.name || id], ["m_device_name", (v) => v],
+    ["label", label], ["integration", plain], ["domain", plain], ["device_class", plain],
+    ["entity_category", plain], ["manufacturer", pattern], ["model", pattern], ["device", device],
+    ["entity", entity], ["area", (id) => ctx.hass.areas?.[id]?.name || id],
+    ["floor", (id) => ctx.hass.floors?.[id]?.name || id], ["device_name", plain],
   ];
-  for (const [key, fmt] of keys) {
-    const values = data[key];
-    if (Array.isArray(values) && values.length) parts.push(values.map(fmt).join(", "));
+  for (const [prefix, wrap] of /** @type {[string, (v: string) => string][]} */ ([
+    ["m_", plain],
+    ["m_not_", (v) => ctx.t("editor_summary_not", { values: v })],
+  ])) {
+    for (const [key, fmt] of keys) {
+      const values = data[prefix + key];
+      if (Array.isArray(values) && values.length) parts.push(wrap(values.map(fmt).join(", ")));
+    }
   }
   return parts.join(" · ");
 }
