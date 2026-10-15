@@ -14,13 +14,14 @@
 
 import { t } from "./i18n.js";
 import { generateAreaView } from "./views/area-view.js";
+import { LAZY_TYPE, lazifyView } from "./lazy-card.js";
 
 export const VERSION = "0.0.0";
 
 const LOG = "[overview-plus]";
 
 /** Keys handled by Overview Plus; everything else is passed to the built-in overview view. */
-const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "debug"];
+const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug"];
 
 /** @type {readonly string[]} */
 const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
@@ -68,14 +69,17 @@ function cardStats(view) {
   /** @type {Record<string, number>} */
   const byType = {};
   let total = 0;
+  let lazy = 0;
   for (const section of view.sections || [{ cards: view.cards || [] }]) {
     for (const card of section.cards || []) {
       if (card.type === "heading") continue;
-      byType[card.type] = (byType[card.type] || 0) + 1;
+      const type = card.type === LAZY_TYPE ? card.card?.type : card.type;
+      byType[type] = (byType[type] || 0) + 1;
       total++;
+      if (card.type === LAZY_TYPE) lazy++;
     }
   }
-  return { total, byType };
+  return { total, lazy, byType };
 }
 
 /**
@@ -148,6 +152,7 @@ class OverviewPlusDashboardStrategy {
         card_rules: config.card_rules,
         override: overrides[area.area_id],
         strip_area_names: config.strip_area_names,
+        lazy_render: config.lazy_render,
         debug: config.debug,
       },
     }));
@@ -208,16 +213,19 @@ class OverviewPlusAreaViewStrategy {
   static async generate(config, hass) {
     try {
       const start = performance.now();
-      const { view, report } = generateAreaView(hass, config.area, {
+      const generated = generateAreaView(hass, config.area, {
         card_rules: config.card_rules,
         override: config.override,
         strip_area_names: config.strip_area_names,
       });
+      const report = generated.report;
+      // Cards below the first screen are rendered when they scroll into view
+      const view = config.lazy_render === false ? generated.view : lazifyView(generated.view);
       if (config.debug) {
         const ms = (performance.now() - start).toFixed(1);
         const stats = cardStats(view);
         const top = Object.entries(stats.byType).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}× ${k}`).join(", ");
-        console.groupCollapsed(`${LOG} area view "${config.area}": generated in ${ms} ms, ${stats.total} cards (${top})`);
+        console.groupCollapsed(`${LOG} area view "${config.area}": generated in ${ms} ms, ${stats.total} cards (${top}), ${stats.lazy} rendered on scroll`);
         console.log("report", report);
         console.log("view", view);
         console.groupEnd();

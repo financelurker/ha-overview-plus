@@ -356,14 +356,16 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._haForm(
         [
           { name: "strip_area_names", selector: { boolean: {} } },
+          { name: "lazy_render", selector: { boolean: {} } },
           { name: "", type: "grid", schema: [
             { name: "load_home_settings", selector: { boolean: {} } },
             { name: "debug", selector: { boolean: {} } },
           ] },
         ],
-        { strip_area_names: this._form.strip_area_names, load_home_settings: this._form.load_home_settings, debug: this._form.debug },
+        { strip_area_names: this._form.strip_area_names, lazy_render: this._form.lazy_render, load_home_settings: this._form.load_home_settings, debug: this._form.debug },
         (v) => {
           this._form.strip_area_names = v.strip_area_names;
+          this._form.lazy_render = v.lazy_render;
           this._form.load_home_settings = v.load_home_settings;
           this._form.debug = v.debug;
           this._emit();
