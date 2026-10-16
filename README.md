@@ -47,7 +47,7 @@ button card that opens a tile with cover controls.
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png" alt="Editor: card rule with popup"></td>
-<td width="50%" valign="top"><b>Pages of the summaries</b> – Home Assistant's pages or dashboards of your own<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png" alt="Editor: pages of the summaries"></td>
+<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png" alt="Editor: pages of the summaries"></td>
 </tr>
 </table>
 
@@ -148,7 +148,8 @@ strategy:
 
 Keys: `light`, `climate`, `security`, `media_players`, `maintenance`, `energy`. Not set: Home
 Assistant's page (`/light`, `/climate`, …; media players: the media players view of Overview Plus).
-In the editor: *General → Pages of the summaries*.
+In the editor: *Overview page → Summaries and shortcuts* – expand a summary to choose its page (with
+the built-in settings, the list shows only the pages).
 
 | Option | Description |
 |---|---|
