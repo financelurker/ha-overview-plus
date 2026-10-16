@@ -44,3 +44,5 @@ card is correct on the first render (no flicker from lazy-loaded built-in module
 - `npm test` – run the unit tests (node:test, fake `hass` in `test/fixtures.js`)
 - `npm run build` – bundle to `dist/overview-plus.js`
 - `npm run bench` – time area view generation for a large fake installation
+- `npm run docs:images` – after adding or changing an image in `docs/images/`: update the `?v=` hashes of the README
+  image URLs (they are cached otherwise). CI checks this with `npm run docs:check`.

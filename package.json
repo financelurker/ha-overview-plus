@@ -9,7 +9,9 @@
     "build": "esbuild src/overview-plus.js --bundle --format=iife --target=es2022 --outfile=dist/overview-plus.js",
     "check": "tsc -p jsconfig.json",
     "test": "node --test test/*.test.js",
-    "bench": "node bench/area-view.bench.js"
+    "bench": "node bench/area-view.bench.js",
+    "docs:images": "node scripts/readme-images.mjs",
+    "docs:check": "node scripts/readme-images.mjs --check"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
