@@ -9,6 +9,7 @@
  * Form shape:
  *   load_home_settings: boolean        true = overview page settings of the built-in Overview
  *   home: { welcome, suggested, favorites, alerts, alert_extra, items }   own overview page settings
+ *   summary_pages: { light, climate, … }   pages the summaries lead to; empty = Home Assistant's own
  *   debug: boolean
  *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_tap, r_popup_type, r_popup_options,
  *            r_scope, r_contexts, r_stop, m_* }]
@@ -25,7 +26,7 @@
 import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
 
 /** Keys of the strategy config managed by the form. */
-const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", ...HOME_KEYS];
+const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", ...HOME_KEYS];
 
 /** Selection criteria editable as fields (all accept one or more values). */
 export const MATCH_FIELDS = [
@@ -307,6 +308,7 @@ export function toForm(config) {
   return {
     load_home_settings: config.load_home_settings !== false,
     home: homeToForm(config),
+    summary_pages: isPlainObject(config.summary_pages) ? { ...config.summary_pages } : {},
     strip_area_names: config.strip_area_names !== false,
     lazy_render: config.lazy_render !== false,
     debug: config.debug === true,
@@ -348,6 +350,10 @@ export function fromForm(form, original) {
   const config = Object.fromEntries(Object.entries(original).filter(([k]) => !MANAGED.includes(k)));
 
   if (form.load_home_settings === false) config.load_home_settings = false;
+  const pages = Object.fromEntries(
+    Object.entries(isPlainObject(form.summary_pages) ? form.summary_pages : {}).filter(([, v]) => typeof v === "string" ? v.trim() : v != null)
+  );
+  if (Object.keys(pages).length) config.summary_pages = pages;
   // Own settings are kept while the built-in ones are used, so switching back restores them
   Object.assign(config, homeFromForm(form.home));
   if (form.strip_area_names === false) config.strip_area_names = false;

@@ -15,6 +15,7 @@
  */
 
 import { createCardFactory } from "../card-factory.js";
+import { summaryPage } from "../summary-pages.js";
 import { findEntities, simpleFilter, SUMMARY_FILTERS, SUMMARY_ICONS } from "../entity-filter.js";
 import { t } from "../i18n.js";
 import { matches } from "../matcher.js";
@@ -54,6 +55,7 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
  * @property {any[]} [card_rules]
  * @property {AreaOverride} [override]
  * @property {boolean} [strip_area_names]       default true: remove the area name from card names
+ * @property {Record<string, string>} [summary_pages]  pages of the category headings (see summary-pages.js)
  */
 
 const LIGHT_BRIGHTNESS_MODES = ["brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww", "white"];
@@ -194,6 +196,11 @@ export function generateAreaView(hass, areaId, options = {}) {
    * @param {Record<string, any>} [extra]
    */
   const stripNames = options.strip_area_names !== false;
+  /** @param {string} key */
+  const pageAction = (key) => {
+    const path = summaryPage(hass, options.summary_pages, key, true);
+    return path ? navigate(path) : undefined;
+  };
   const card = (factory, ctx, extra = {}) => {
     /** @type {Record<string, any>} */
     const base = { ...defaultEntityCard(ctx), ...extra };
@@ -276,7 +283,7 @@ export function generateAreaView(hass, areaId, options = {}) {
         type: "grid",
         cards: [
           headingCard(t(hass, "light"), SUMMARY_ICONS.light, {
-            tap_action: hass.panels?.light ? navigate("/light?historyBack=1") : undefined,
+            tap_action: pageAction("light"),
             badges: [
               {
                 type: "button", icon: "mdi:power", text: t(hass, "light_off"),
@@ -294,18 +301,18 @@ export function generateAreaView(hass, areaId, options = {}) {
         ],
       });
     }
-    /** @type {[EntityContext[], string, string | undefined][]} */
+    /** @type {[EntityContext[], string][]} */
     const simple = [
-      [climate, "climate", hass.panels?.climate ? "/climate?historyBack=1" : undefined],
-      [security, "security", hass.panels?.security ? "/security?historyBack=1" : undefined],
-      [media, "media_players", "media-players?historyBack=1"],
+      [climate, "climate"],
+      [security, "security"],
+      [media, "media_players"],
     ];
-    for (const [list, key, path] of simple) {
+    for (const [list, key] of simple) {
       if (!list.length) continue;
       sections.push({
         type: "grid",
         cards: [
-          headingCard(t(hass, key), SUMMARY_ICONS[key], { tap_action: path ? navigate(path) : undefined }),
+          headingCard(t(hass, key), SUMMARY_ICONS[key], { tap_action: pageAction(key) }),
           ...compact(list.map((ctx) => card(highlight, ctx))),
         ],
       });

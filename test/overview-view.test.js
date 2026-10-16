@@ -137,3 +137,18 @@ test("shouldRegenerate: registries or alert severity", () => {
   const states = { ...a.states, "binary_sensor.x": { entity_id: "binary_sensor.x", state: "off", attributes: { device_class: "smoke" } } };
   assert.equal(overviewShouldRegenerate({ alert_entities: [{ entity: "binary_sensor.x" }] }, a, { ...a, states }), true);
 });
+
+test("summaries lead to the configured pages; a page of your own replaces a missing built-in one", async () => {
+  const pages = { light: "/lights-plus/0", media_players: "/media-plus" };
+  const { view } = await generateOverviewView(hass(), { summary_pages: pages });
+  const cards = section(view, "Summaries").cards;
+  const tap = (key) => cards.find((c) => c.summary === key)?.tap_action?.navigation_path;
+  assert.equal(tap("light"), "/lights-plus/0");
+  assert.equal(tap("climate"), "/climate?historyBack=1", "not configured: Home Assistant's page");
+
+  const noPanels = hass({ panels: {} });
+  const res = await generateOverviewView(noPanels, { summary_pages: { light: "/lights-plus/0" } });
+  const summaries = section(res.view, "Summaries").cards.map((c) => c.summary).filter(Boolean);
+  assert.ok(summaries.includes("light"), "own page: shown without Home Assistant's light page");
+  assert.ok(!summaries.includes("climate"));
+});

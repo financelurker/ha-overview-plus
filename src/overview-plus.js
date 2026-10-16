@@ -27,7 +27,7 @@ export const VERSION = "0.0.0";
 const LOG = "[overview-plus]";
 
 /** Keys handled by Overview Plus; everything else is passed to the built-in overview view. */
-const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug"];
+const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug", "summary_pages"];
 
 /** @type {readonly string[]} */
 const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
@@ -139,6 +139,7 @@ class OverviewPlusDashboardStrategy {
         card_rules: config.card_rules,
         override: overrides[area.area_id],
         strip_area_names: config.strip_area_names,
+        summary_pages: config.summary_pages,
         lazy_render: config.lazy_render,
         debug: config.debug,
       },
@@ -158,6 +159,7 @@ class OverviewPlusDashboardStrategy {
             type: "custom:overview-plus-overview",
             card_rules: config.card_rules,
             area_overrides: config.area_overrides,
+            summary_pages: config.summary_pages,
             lazy_render: config.lazy_render,
             debug: config.debug,
           },
@@ -270,6 +272,7 @@ class OverviewPlusAreaViewStrategy {
         card_rules: config.card_rules,
         override: config.override,
         strip_area_names: config.strip_area_names,
+        summary_pages: config.summary_pages,
       });
       const report = generated.report;
       // Cards below the first screen are rendered when they scroll into view

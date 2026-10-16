@@ -22,6 +22,7 @@
 
 import { fromForm, homeToForm, toForm } from "./editor-config.js";
 import { loadHomeSettings, SUMMARY_KEY_ICONS } from "../home-settings.js";
+import { defaultSummaryPage, SUMMARY_PAGE_KEYS } from "../summary-pages.js";
 import { areaTileClassOptions, collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
@@ -57,6 +58,7 @@ const STYLE = `
   .item-row ha-icon { color: var(--secondary-text-color); }
   .home-actions { margin-top: 8px; }
   .rule-actions { margin-bottom: 24px; }
+  .general > ha-form { display: block; margin-bottom: 24px; }
   ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
   .panel-body { display: flex; flex-direction: column; gap: 24px; padding: 12px; }
   .panel-body > .row.icons { margin-top: -16px; }
@@ -191,10 +193,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   }
 
   /** @param {any} schema */
-  _label = (schema) => this._t(`editor_${schema.name}`);
+  _label = (schema) => (schema.name?.startsWith("sp_") ? this._t(schema.name.slice(3)) : this._t(`editor_${schema.name}`));
 
   /** @param {any} schema */
   _helper = (schema) => {
+    if (schema.name?.startsWith("sp_")) {
+      const page = defaultSummaryPage(this._hass, schema.name.slice(3));
+      return page ? this._t("editor_sp_default", { page: page.replace("?historyBack=1", "") }) : this._t("editor_sp_none");
+    }
     const key = `editor_${schema.name}_help`;
     const text = this._t(key);
     return text === key ? undefined : text;
@@ -377,6 +383,18 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._hint("editor_card_rules_help"),
       this._parts.rules,
       ruleActions,
+      this._subheading("editor_summary_pages"),
+      this._hint("editor_summary_pages_help"),
+      this._haForm(
+        SUMMARY_PAGE_KEYS.map((key) => ({ name: `sp_${key}`, selector: { navigation: {} } })),
+        Object.fromEntries(SUMMARY_PAGE_KEYS.map((key) => [`sp_${key}`, this._form.summary_pages[key] ?? ""])),
+        (v) => {
+          this._form.summary_pages = Object.fromEntries(
+            SUMMARY_PAGE_KEYS.map((key) => [key, v[`sp_${key}`] || undefined]).filter(([, page]) => page)
+          );
+          this._emit();
+        }
+      ),
       this._haForm(
         [
           { name: "strip_area_names", selector: { boolean: {} } },

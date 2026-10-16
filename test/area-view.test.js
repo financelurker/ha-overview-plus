@@ -281,3 +281,10 @@ test("device headings and table titles without the area name", () => {
   }).view;
   assert.equal(table.sections[0].cards[1].title, "pve1");
 });
+
+test("category headings lead to the configured summary pages", () => {
+  const { view } = generateAreaView(makeHass(), "living_room", { summary_pages: { light: "/lights-plus/0" } });
+  const heading = (name) => view.sections.flatMap((s) => s.cards).find((c) => c.type === "heading" && c.heading === name);
+  assert.equal(heading("Lights").tap_action.navigation_path, "/lights-plus/0");
+  assert.equal(heading("Climate").tap_action.navigation_path, "/climate?historyBack=1");
+});
