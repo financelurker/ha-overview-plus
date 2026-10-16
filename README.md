@@ -118,12 +118,30 @@ strategy:
 Summary keys: `light`, `climate`, `security`, `media_players`, `maintenance`, `weather`, `energy`.
 With the built-in settings (`load_home_settings: true`), these keys are ignored.
 
+### Pages of the summaries
+
+The summaries on the overview page and the category headings of an area view (*Lights*, *Climate*,
+*Security*, *Media players*) lead to Home Assistant's own pages – or to a dashboard of your own:
+
+```yaml
+strategy:
+  type: custom:overview-plus
+  summary_pages:
+    light: /lights-plus/overview       # any navigation path
+    security: /dashboard-alarm/0
+```
+
+Keys: `light`, `climate`, `security`, `media_players`, `maintenance`, `energy`. Not set: Home
+Assistant's page (`/light`, `/climate`, …; media players: the media players view of Overview Plus).
+In the editor: *General → Pages of the summaries*.
+
 | Option | Description |
 |---|---|
 | `card_rules` | List of rules that replace, adjust or hide cards. |
 | `area_overrides` | Per-area layout, keyed by area id. |
 | `load_home_settings` | Use the overview page settings of the built-in Overview (default `true`); `false` = own settings, see above. |
 | `lazy_render` | Render cards below the first screen of an area view only when they scroll into view (default `true`). |
+| `summary_pages` | Pages the summaries and category headings lead to, see *Pages of the summaries*. |
 | `strip_area_names` | Remove the area name from card names and device headings in area views, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
 | `debug` | Log the generated area views and the section assignment to the browser console. |
 

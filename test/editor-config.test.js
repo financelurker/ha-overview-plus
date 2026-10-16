@@ -221,3 +221,11 @@ test("overview page settings round trip", () => {
   const plain = { load_home_settings: false, shortcuts: [{ type: "summary", key: "light" }] };
   assert.deepEqual(fromForm(toForm(plain), plain), { load_home_settings: false });
 });
+
+test("summary pages: only configured ones are written", () => {
+  const config = { summary_pages: { light: "/lights-plus/0", security: "/alarm" } };
+  assert.deepEqual(fromForm(toForm(config), config), config);
+  const form = toForm({});
+  form.summary_pages = { light: "", climate: "/heat" };
+  assert.deepEqual(fromForm(form, {}), { summary_pages: { climate: "/heat" } });
+});

@@ -15,6 +15,7 @@ import { AREA_TILE_TYPE } from "../area-tile-card.js";
 import { createCardFactory } from "../card-factory.js";
 import { findEntities, isOtherDeviceEntity, simpleFilter, SUMMARY_FILTERS } from "../entity-filter.js";
 import { resolveShortcutItems } from "../home-settings.js";
+import { hasOwnSummaryPage, summaryPage } from "../summary-pages.js";
 import { t } from "../i18n.js";
 
 export { resolveShortcutItems };
@@ -31,6 +32,7 @@ import { domainOf, entityContext, entityCategory } from "../registry.js";
  * @property {boolean} [hide_welcome_message]
  * @property {boolean} [hide_suggested_entities]
  * @property {any[]} [shortcuts]
+ * @property {Record<string, string>} [summary_pages]  pages the summaries lead to (see summary-pages.js)
  */
 
 const MAX_COLUMNS = 3;
@@ -264,16 +266,20 @@ export async function generateOverviewView(hass, options = {}) {
   // ------------------------------------------------------------- summaries
   const any = (/** @type {any[]} */ filters) => findEntities(all, filters).length > 0;
   const panels = hass.panels || {};
-  const hasLights = !!panels.light && any(SUMMARY_FILTERS.light);
+  const pages = options.summary_pages;
+  // A summary needs Home Assistant's page only if it leads there
+  const reachable = (/** @type {string} */ key) => !!panels[key] || hasOwnSummaryPage(pages, key);
+  const page = (/** @type {string} */ key) => navigate(/** @type {string} */ (summaryPage(hass, pages, key)));
+  const hasLights = reachable("light") && any(SUMMARY_FILTERS.light);
   const hasMediaPlayers = any(SUMMARY_FILTERS.media_players);
   const hasClimate =
-    !!panels.climate &&
+    reachable("climate") &&
     (Object.values(hass.areas || {}).some(
       (area) => (area.temperature_entity_id && hass.states[area.temperature_entity_id]) ||
         (area.humidity_entity_id && hass.states[area.humidity_entity_id])
     ) || any(SUMMARY_FILTERS.climate));
-  const hasSecurity = !!panels.security && any(SUMMARY_FILTERS.security);
-  const hasMaintenance = !!panels.maintenance && any(MAINTENANCE_FILTERS);
+  const hasSecurity = reachable("security") && any(SUMMARY_FILTERS.security);
+  const hasMaintenance = reachable("maintenance") && any(MAINTENANCE_FILTERS);
 
   const alertEntities = options.alert_entities ?? [];
   const alertSeverityEntities = alertEntities.filter((a) => alertSeverity(a, hass.states?.[a.entity]) === "alert");
@@ -283,7 +289,7 @@ export async function generateOverviewView(hass, options = {}) {
   const weatherEntity = all.filter(weatherFilter).map((ctx) => ctx.entity_id).sort()[0];
 
   let hasEnergy = false;
-  if (panels.energy && isLoaded(hass, "energy")) {
+  if (reachable("energy") && isLoaded(hass, "energy")) {
     try {
       const prefs = await hass.callWS({ type: "energy/get_prefs" });
       hasEnergy = !!prefs?.energy_sources?.some((/** @type {any} */ s) => s.type === "grid" && !!s.stat_energy_from);
@@ -294,23 +300,23 @@ export async function generateOverviewView(hass, options = {}) {
 
   /** @type {Record<string, () => Record<string, any> | undefined>} */
   const summaryBuilders = {
-    light: () => (hasLights ? { type: "home-summary", summary: "light", tap_action: navigate("/light?historyBack=1") } : undefined),
-    climate: () => (hasClimate ? { type: "home-summary", summary: "climate", tap_action: navigate("/climate?historyBack=1") } : undefined),
+    light: () => (hasLights ? { type: "home-summary", summary: "light", tap_action: page("light") } : undefined),
+    climate: () => (hasClimate ? { type: "home-summary", summary: "climate", tap_action: page("climate") } : undefined),
     security: () =>
       hasSecurity
         ? {
             type: "home-summary",
             summary: "security",
-            tap_action: navigate("/security?historyBack=1"),
+            tap_action: page("security"),
             ...(alertEntities.length ? { alert_entities: alertEntities } : {}),
           }
         : undefined,
-    media_players: () => (hasMediaPlayers ? { type: "home-summary", summary: "media_players", tap_action: navigate("media-players") } : undefined),
+    media_players: () => (hasMediaPlayers ? { type: "home-summary", summary: "media_players", tap_action: page("media_players") } : undefined),
     maintenance: () =>
-      hasMaintenance ? { type: "home-summary", summary: "maintenance", tap_action: navigate("/maintenance?historyBack=1") } : undefined,
+      hasMaintenance ? { type: "home-summary", summary: "maintenance", tap_action: page("maintenance") } : undefined,
     weather: () =>
       weatherEntity ? { type: "tile", entity: weatherEntity, name: t(hass, "weather"), state_content: ["temperature", "state"] } : undefined,
-    energy: () => (hasEnergy ? { type: "home-summary", summary: "energy", tap_action: navigate("/energy?historyBack=1") } : undefined),
+    energy: () => (hasEnergy ? { type: "home-summary", summary: "energy", tap_action: page("energy") } : undefined),
   };
 
   /** @type {Record<string, any>[]} */
@@ -336,7 +342,7 @@ export async function generateOverviewView(hass, options = {}) {
         type: "home-summary",
         summary: "alerts",
         alert_entities: alertSeverityEntities,
-        tap_action: navigate("/security?historyBack=1"),
+        tap_action: summaryPage(hass, pages, "security") ? page("security") : undefined,
         visibility: [{ condition: "or", conditions: alertActiveConditions }],
       }
     : undefined;
