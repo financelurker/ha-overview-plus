@@ -13,6 +13,7 @@
  * (custom:overview-plus-devices).
  */
 
+import { HOME_KEYS, loadHomeSettings } from "./home-settings.js";
 import { t } from "./i18n.js";
 import { generateAreaView } from "./views/area-view.js";
 import { generateOverviewView, overviewShouldRegenerate } from "./views/overview-view.js";
@@ -30,32 +31,6 @@ const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", 
 
 /** @type {readonly string[]} */
 const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
-
-/**
- * Settings of the built-in Overview (favorites, shortcuts, alerts), stored by HA as system data.
- * @param {any} hass
- */
-async function loadHomeSettings(hass) {
-  /** @param {string} key */
-  const get = async (key) => {
-    try {
-      const res = await hass.callWS({ type: "frontend/get_system_data", key });
-      return res?.value ?? {};
-    } catch (err) {
-      console.warn(`${LOG} System data "${key}" not readable.`, err);
-      return {};
-    }
-  };
-  const [home, security] = await Promise.all([get("home"), get("security")]);
-  const settings = {
-    alert_entities: security.alert_entities,
-    favorite_entities: home.favorite_entities,
-    hide_welcome_message: home.hide_welcome_message,
-    hide_suggested_entities: home.hide_suggested_entities,
-    shortcuts: home.shortcuts,
-  };
-  return Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined));
-}
 
 /**
  * @param {string} title
@@ -143,8 +118,15 @@ class OverviewPlusDashboardStrategy {
     }
 
     const passthrough = Object.fromEntries(Object.entries(config).filter(([k]) => !OWN_KEYS.includes(k)));
+    // Overview page settings: either this dashboard's own (load_home_settings: false)
+    // or those of the built-in Overview – never a mix of both.
     const overviewConfig =
-      config.load_home_settings === false ? passthrough : { ...(await loadHomeSettings(hass)), ...passthrough };
+      config.load_home_settings === false
+        ? passthrough
+        : {
+            ...Object.fromEntries(Object.entries(passthrough).filter(([k]) => !HOME_KEYS.includes(k))),
+            ...(await loadHomeSettings(hass)),
+          };
     const overrides = config.area_overrides || {};
 
     const areaViews = Object.values(hass.areas || {}).map((area) => ({

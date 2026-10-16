@@ -8,6 +8,7 @@
  * with `{ config }` on every change.
  *
  * Layout (no dialogs):
+ *   - Overview page: settings of the overview page, own or those of the built-in Overview
  *   - Area layouts: one collapsible block per customized area with its options and its
  *     sections (each a collapsible block with move/delete buttons), "add area" below
  *   - General: card rules (each a collapsible block) and the dashboard-wide options
@@ -19,7 +20,8 @@
  * without re-rendering (keeps the focus); structure changes re-render the affected part.
  */
 
-import { fromForm, toForm } from "./editor-config.js";
+import { fromForm, homeToForm, toForm } from "./editor-config.js";
+import { loadHomeSettings, SUMMARY_KEY_ICONS } from "../home-settings.js";
 import { areaTileClassOptions, collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
@@ -44,7 +46,16 @@ const STYLE = `
   .list:empty { display: none; }
   .list > .hint { margin: 0; }
   .areas, .rules { margin-bottom: 16px; }
-  .general { border-top: 1px solid var(--divider-color); padding-top: 24px; }
+  .general, .areas-block { border-top: 1px solid var(--divider-color); padding-top: 24px; }
+  .home > ha-form + ha-form { display: block; margin-top: 16px; }
+  .home > .subheading { margin-top: 24px; }
+  .home-items { margin: 8px 0 16px; }
+  .item-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 12px;
+    border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
+  .item-row .label { flex: 1; }
+  .item-row.off .label, .item-row.off ha-icon { opacity: 0.5; }
+  .item-row ha-icon { color: var(--secondary-text-color); }
+  .home-actions { margin-top: 8px; }
   .rule-actions { margin-bottom: 24px; }
   ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
   .panel-body { display: flex; flex-direction: column; gap: 24px; padding: 12px; }
@@ -126,6 +137,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openSections = new Map();
     /** @type {Set<number>} indexes of expanded card rule blocks */
     this._openRules = new Set();
+    /** @type {Set<number>} indexes of expanded shortcut blocks */
+    this._openShortcuts = new Set();
     /** @type {any} */
     this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
@@ -330,9 +343,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     style.textContent = STYLE;
     root.appendChild(style);
 
+    // ---- Overview page settings
+    const homeBlock = document.createElement("div");
+    homeBlock.className = "block home";
+    this._parts.home = homeBlock;
+
     // ---- Area layouts: one block per customized area
     const areaBlock = document.createElement("div");
-    areaBlock.className = "block";
+    areaBlock.className = "block areas-block";
     areaBlock.append(this._heading("editor_areas"), this._hint("editor_areas_help"));
     this._parts.areas = document.createElement("div");
     this._parts.areas.className = "areas list";
@@ -363,24 +381,21 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         [
           { name: "strip_area_names", selector: { boolean: {} } },
           { name: "lazy_render", selector: { boolean: {} } },
-          { name: "", type: "grid", schema: [
-            { name: "load_home_settings", selector: { boolean: {} } },
-            { name: "debug", selector: { boolean: {} } },
-          ] },
+          { name: "debug", selector: { boolean: {} } },
         ],
-        { strip_area_names: this._form.strip_area_names, lazy_render: this._form.lazy_render, load_home_settings: this._form.load_home_settings, debug: this._form.debug },
+        { strip_area_names: this._form.strip_area_names, lazy_render: this._form.lazy_render, debug: this._form.debug },
         (v) => {
           this._form.strip_area_names = v.strip_area_names;
           this._form.lazy_render = v.lazy_render;
-          this._form.load_home_settings = v.load_home_settings;
           this._form.debug = v.debug;
           this._emit();
         }
       )
     );
 
-    root.append(areaBlock, generalBlock);
+    root.append(homeBlock, areaBlock, generalBlock);
     this._built = true;
+    this._renderHome();
     this._renderAreas();
     this._renderRules();
   }
@@ -416,6 +431,178 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _updateHass() {
     const root = /** @type {ShadowRoot} */ (this.shadowRoot);
     root.querySelectorAll("ha-form").forEach((form) => { /** @type {any} */ (form).hass = this._hass; });
+  }
+
+  // ------------------------------------------------------------ overview page
+
+  /** Whether the own settings are still untouched (then switching to them copies the built-in ones). */
+  _homeIsDefault() {
+    return JSON.stringify(this._form.home) === JSON.stringify(homeToForm({}));
+  }
+
+  /** Copy the settings of the built-in Overview into the own settings. */
+  async _copyHome() {
+    if (typeof this._hass?.callWS !== "function") return;
+    const settings = await loadHomeSettings(this._hass);
+    this._form.home = homeToForm(settings);
+    this._renderHome();
+    this._emit();
+  }
+
+  _renderHome() {
+    const block = this._parts.home;
+    if (!block) return;
+    block.innerHTML = "";
+    const own = this._form.load_home_settings === false;
+    const home = this._form.home;
+    const sources = ["builtin", "own"].map((value) => ({ value, label: this._t(`editor_h_source_${value}`) }));
+    block.append(
+      this._heading("editor_home"),
+      this._hint("editor_home_help"),
+      this._haForm(
+        [{ name: "h_source", required: true, selector: { select: { mode: "dropdown", options: sources } } }],
+        { h_source: own ? "own" : "builtin" },
+        (v) => {
+          const toOwn = v.h_source === "own";
+          if (toOwn === own) return;
+          this._form.load_home_settings = !toOwn;
+          // First switch to own settings: start from those of the built-in Overview
+          if (toOwn && this._homeIsDefault()) this._copyHome();
+          this._renderHome();
+          this._emit();
+        }
+      )
+    );
+    if (!own) {
+      const hint = this._hint("editor_h_source_builtin_hint");
+      hint.style.marginTop = "8px";
+      block.append(hint);
+      return;
+    }
+
+    block.append(
+      this._haForm(
+        [
+          { name: "h_welcome", selector: { boolean: {} } },
+          { name: "h_favorites", selector: { entity: { multiple: true, reorder: true } } },
+          { name: "h_suggested", selector: { boolean: {} } },
+          { name: "h_alerts", selector: { entity: { multiple: true } } },
+        ],
+        { h_welcome: home.welcome, h_favorites: home.favorites, h_suggested: home.suggested, h_alerts: home.alerts },
+        (v) => {
+          home.welcome = v.h_welcome !== false;
+          home.favorites = v.h_favorites || [];
+          home.suggested = v.h_suggested !== false;
+          home.alerts = v.h_alerts || [];
+          this._emit();
+        }
+      ),
+      this._subheading("editor_summaries"),
+      this._hint("editor_summaries_help")
+    );
+    const list = document.createElement("div");
+    list.className = "list home-items";
+    block.append(list);
+    this._renderHomeItems(list);
+
+    const actions = document.createElement("div");
+    actions.className = "row left home-actions";
+    actions.append(
+      this._button(this._t("editor_add_shortcut"), () => {
+        home.items.push({ type: "custom", path: "" });
+        this._openShortcuts.add(home.items.length - 1);
+        this._renderHomeItems(list);
+        // nothing to emit yet: a shortcut without path is not saved
+      }),
+      this._button(this._t("editor_copy_home"), () => this._copyHome(), "plain")
+    );
+    block.append(actions);
+  }
+
+  /** @param {HTMLElement} list */
+  _renderHomeItems(list) {
+    list.innerHTML = "";
+    const items = this._form.home.items;
+    const rerender = () => this._renderHomeItems(list);
+    const swap = (/** @type {number} */ index, /** @type {number} */ delta) => {
+      const target = index + delta;
+      [items[index], items[target]] = [items[target], items[index]];
+      const a = this._openShortcuts.has(index);
+      const b = this._openShortcuts.has(target);
+      this._openShortcuts.delete(index);
+      this._openShortcuts.delete(target);
+      if (a) this._openShortcuts.add(target);
+      if (b) this._openShortcuts.add(index);
+      rerender();
+      this._emit();
+    };
+    const moveButtons = (/** @type {number} */ index) => [
+      this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
+      this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
+    ];
+
+    items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
+      if (item.type === "summary") {
+        const row = document.createElement("div");
+        row.className = `item-row${item.hidden ? " off" : ""}`;
+        const icon = /** @type {any} */ (document.createElement("ha-icon"));
+        icon.icon = /** @type {Record<string, string>} */ (SUMMARY_KEY_ICONS)[item.key] || "mdi:view-dashboard";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = this._t(item.key);
+        const toggle = /** @type {any} */ (document.createElement(customElements.get("ha-switch") ? "ha-switch" : "input"));
+        if (toggle.localName === "input") toggle.type = "checkbox";
+        toggle.checked = !item.hidden;
+        toggle.title = this._t("editor_show");
+        toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${label.textContent}`);
+        toggle.addEventListener("change", () => {
+          if (toggle.checked) delete item.hidden;
+          else item.hidden = true;
+          row.classList.toggle("off", !!item.hidden);
+          this._emit();
+        });
+        row.append(icon, label, ...moveButtons(index), toggle);
+        list.append(row);
+        return;
+      }
+      const header = () => item.label || item.path || this._t("editor_shortcut_new");
+      const panel = this._panel(header(), item.label ? item.path || "" : "", this._openShortcuts.has(index), (open) => {
+        if (open) this._openShortcuts.add(index);
+        else this._openShortcuts.delete(index);
+      });
+      const form = this._haForm(
+        [
+          { name: "s_path", required: true, selector: { navigation: {} } },
+          { name: "", type: "grid", schema: [
+            { name: "s_label", selector: { text: {} } },
+            { name: "s_icon", selector: { icon: {} } },
+          ] },
+          { name: "s_color", selector: { ui_color: { default_color: "primary" } } },
+        ],
+        { s_path: item.path, s_label: item.label, s_icon: item.icon, s_color: item.color },
+        (v) => {
+          item.path = v.s_path || "";
+          item.label = v.s_label || undefined;
+          item.icon = v.s_icon || undefined;
+          item.color = v.s_color || undefined;
+          panel.setHeader(header(), item.label ? item.path || "" : "");
+          this._emit();
+        }
+      );
+      const row = document.createElement("div");
+      row.className = "row icons";
+      row.append(
+        ...moveButtons(index),
+        this._iconButton(ICON.delete, this._t("editor_delete_shortcut"), () => {
+          items.splice(index, 1);
+          this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          rerender();
+          this._emit();
+        })
+      );
+      panel.body.append(form, row);
+      list.append(panel.root);
+    });
   }
 
   _renderAreas() {

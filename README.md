@@ -68,6 +68,8 @@ Settings → Dashboards → **Add dashboard** → *Community dashboards* → **O
 
 To configure it, open the dashboard → ✏️ (edit). The visual editor shows:
 
+- **Overview page:** welcome message, favorites, suggested entities, summaries and shortcuts, alert
+  entities – the same as in the built-in Overview, or own settings for this dashboard.
 - **Area layouts:** every area with its own layout is a collapsible block showing its sections and a
   short summary. Inside: badges, the toggles for remaining devices and automations, and the sections
   (title, icon, layout, label). *Refine selection*, *Entity filter* and *Primary entity* are form
@@ -93,15 +95,34 @@ strategy:
   type: custom:overview-plus
 ```
 
-Favorites, shortcuts and alerts are taken from the settings of the built-in Overview
-(set `load_home_settings: false` to disable). Options of the built-in overview such as
-`favorite_entities` can also be set directly and take precedence.
+The overview page settings – welcome message, favorites, suggested entities, summaries and shortcuts,
+alert entities – are by default the same as in the built-in Overview (*Edit Overview page* there).
+In the editor, *Overview page → Own settings for this dashboard* gives the dashboard its own; switching
+copies the current settings of the built-in Overview as a starting point. In YAML:
+
+```yaml
+strategy:
+  type: custom:overview-plus
+  load_home_settings: false            # own settings instead of those of the built-in Overview
+  favorite_entities: [light.living_room, climate.bathroom]
+  hide_welcome_message: true
+  hide_suggested_entities: true
+  shortcuts:                           # summaries in this order; missing ones are appended
+    - { type: summary, key: climate }
+    - { type: summary, key: security, hidden: true }
+    - { type: custom, path: /map, label: Map, icon: mdi:map }
+  alert_entities:
+    - { entity: binary_sensor.front_door, severity: alert }   # severity: alert | warning
+```
+
+Summary keys: `light`, `climate`, `security`, `media_players`, `maintenance`, `weather`, `energy`.
+With the built-in settings (`load_home_settings: true`), these keys are ignored.
 
 | Option | Description |
 |---|---|
 | `card_rules` | List of rules that replace, adjust or hide cards. |
 | `area_overrides` | Per-area layout, keyed by area id. |
-| `load_home_settings` | Use favorites/shortcuts of the built-in Overview (default `true`). |
+| `load_home_settings` | Use the overview page settings of the built-in Overview (default `true`); `false` = own settings, see above. |
 | `lazy_render` | Render cards below the first screen of an area view only when they scroll into view (default `true`). |
 | `strip_area_names` | Remove the area name from card names and device headings in area views, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
 | `debug` | Log the generated area views and the section assignment to the browser console. |

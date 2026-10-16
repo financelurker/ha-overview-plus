@@ -198,3 +198,26 @@ test("choosing a popup in the form", () => {
     { match: { domain: "light" }, card: { type: "tile" } },
   ]);
 });
+
+test("overview page settings round trip", () => {
+  const config = {
+    load_home_settings: false,
+    favorite_entities: ["light.a", "light.b"],
+    hide_welcome_message: true,
+    shortcuts: [
+      { type: "custom", path: "/map", label: "Map", icon: "mdi:map" },
+      { type: "summary", key: "climate" },
+      { type: "summary", key: "light", hidden: true },
+      { type: "summary", key: "security" },
+      { type: "summary", key: "media_players" },
+      { type: "summary", key: "maintenance" },
+      { type: "summary", key: "weather" },
+      { type: "summary", key: "energy" },
+    ],
+    alert_entities: [{ entity: "binary_sensor.door", severity: "alert" }, { entity: "lock.front" }],
+  };
+  assert.deepEqual(fromForm(toForm(config), config), config);
+  // default summaries are not written
+  const plain = { load_home_settings: false, shortcuts: [{ type: "summary", key: "light" }] };
+  assert.deepEqual(fromForm(toForm(plain), plain), { load_home_settings: false });
+});
