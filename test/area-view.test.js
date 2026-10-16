@@ -125,17 +125,35 @@ test("area override: own sections first, then remaining devices; no standard cat
   assert.deepEqual(report.sections.map((s) => s.title), ["Hypervisor", "VMs", "Exporter"]);
 });
 
-test("area override: a device belongs to the first matching section only", () => {
+test("area override: an entity belongs to the first section that shows it", () => {
   const { view } = generateAreaView(makeHass(), "proxmox", {
     override: {
       sections: [
-        { title: "All Proxmox", match: { integration: "proxmoxve", domain: "binary_sensor" } },
+        { title: "Status", match: { integration: "proxmoxve", domain: "binary_sensor" } },
         { title: "CPU", match: { domain: "sensor", integration: "proxmoxve" } },
+        { title: "Again", match: { integration: "proxmoxve" } },
       ],
     },
   });
-  // every proxmoxve device has a binary_sensor -> all claimed by the first section, "CPU" stays empty
-  assert.deepEqual(headings(view), ["All Proxmox", "", "pve exporter", "UPS"]);
+  const entitiesOf = (title) => {
+    const section = view.sections.find((s) => s.cards[0]?.heading === title);
+    return section ? section.cards.slice(1).map((c) => c.entity) : [];
+  };
+  // the status sensors go to "Status", the CPU sensors of the same devices still to "CPU"
+  assert.deepEqual(entitiesOf("Status"), ["binary_sensor.pve_status", "binary_sensor.vm_web_status", "binary_sensor.vm_db_status"]);
+  assert.ok(entitiesOf("CPU").includes("sensor.pve_cpu"));
+  assert.ok(!entitiesOf("Again").includes("binary_sensor.pve_status"), "shown entities are not shown again");
+});
+
+test("area override: other entities of a device stay in its card below", () => {
+  const { view } = generateAreaView(makeHass(), "proxmox", {
+    override: { sections: [{ title: "Status", match: { entity: "binary_sensor.pve_status" } }] },
+  });
+  const pve = view.sections.find((s) => s.cards[0]?.heading === "pve1");
+  assert.ok(pve, "the device keeps its own card");
+  const shown = pve.cards.slice(1).map((c) => c.entity);
+  assert.ok(shown.includes("sensor.pve_cpu"));
+  assert.ok(!shown.includes("binary_sensor.pve_status"), "without the entity already shown above");
 });
 
 test("area override: entity selection, table layout, hiding remaining devices", () => {

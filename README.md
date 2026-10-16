@@ -245,8 +245,9 @@ When an area has `sections`, the standard categories (lights, climate, security,
 scenes) are not built. The configured sections are shown in order, followed by all remaining devices
 of the area and its automations, as in the default view.
 
-- A **device** belongs to the first section that matches any of its entities; later sections and the
-  remaining-devices list do not show it again.
+- An **entity** is shown in the first section that selects it (`match` and `entities`); later
+  sections do not show it again. Other entities of the same device are not taken along: they can be
+  selected by a later section, or appear in the device's card below, as in the built-in area view.
 - `layout`:
   - `tiles` (default): one tile per entity.
   - `devices`: a heading per device with its entities.
