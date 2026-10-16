@@ -53,9 +53,11 @@ const STYLE = `
   .home-items { margin: 8px 0 16px; }
   .item-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 12px;
     border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
-  .item-row .label { flex: 1; }
-  .item-row.off .label, .item-row.off ha-icon { opacity: 0.5; }
-  .item-row ha-icon { color: var(--secondary-text-color); }
+  .item-row { gap: 0; }
+  .item-row .label { flex: 1; margin-left: 12px; font-weight: var(--ha-font-weight-medium, 500); }
+  .item-row.off .label, .item-row.off ha-icon, .summary-panel.off .summary-icon { opacity: 0.5; }
+  .item-row ha-icon, .summary-icon { color: var(--secondary-text-color); }
+  .summary-panel .summary-icon { margin-right: 12px; }
   .home-actions { margin-top: 8px; }
   .rule-actions { margin-bottom: 24px; }
   .general > ha-form { display: block; margin-bottom: 24px; }
@@ -141,6 +143,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openRules = new Set();
     /** @type {Set<number>} indexes of expanded shortcut blocks */
     this._openShortcuts = new Set();
+    /** @type {Set<string>} keys of expanded summary blocks */
+    this._openSummaries = new Set();
     /** @type {any} */
     this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
@@ -193,7 +197,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   }
 
   /** @param {any} schema */
-  _label = (schema) => (schema.name?.startsWith("sp_") ? this._t(schema.name.slice(3)) : this._t(`editor_${schema.name}`));
+  _label = (schema) => (schema.name?.startsWith("sp_") ? this._t("editor_sp_page") : this._t(`editor_${schema.name}`));
 
   /** @param {any} schema */
   _helper = (schema) => {
@@ -279,8 +283,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {string} secondary
    * @param {boolean} expanded
    * @param {(expanded: boolean) => void} onToggle
+   * @param {{ leading?: HTMLElement, icons?: HTMLElement[] }} [extras] icon before the header, controls after it
    */
-  _panel(header, secondary, expanded, onToggle) {
+  _panel(header, secondary, expanded, onToggle, extras = {}) {
     if (customElements.get("ha-expansion-panel")) {
       const panel = /** @type {any} */ (document.createElement("ha-expansion-panel"));
       panel.header = header;
@@ -288,6 +293,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       panel.expanded = expanded;
       panel.outlined = true;
       panel.addEventListener("expanded-changed", (/** @type {any} */ ev) => onToggle(ev.detail.expanded));
+      if (extras.leading) {
+        extras.leading.slot = "leading-icon";
+        panel.appendChild(extras.leading);
+      }
+      for (const icon of extras.icons || []) {
+        icon.slot = "icons";
+        panel.appendChild(icon);
+      }
       const body = document.createElement("div");
       body.className = "panel-body";
       panel.appendChild(body);
@@ -309,6 +322,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const body = document.createElement("div");
     body.className = "panel-body";
     details.append(summary, body);
+    if (extras.icons?.length) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.append(...extras.icons);
+      body.append(row);
+    }
     details.addEventListener("toggle", () => onToggle(details.open));
     const setHeader = (/** @type {string} */ h, /** @type {string} */ s) => { title.textContent = h; sub.textContent = s; };
     setHeader(header, secondary);
@@ -383,18 +402,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._hint("editor_card_rules_help"),
       this._parts.rules,
       ruleActions,
-      this._subheading("editor_summary_pages"),
-      this._hint("editor_summary_pages_help"),
-      this._haForm(
-        SUMMARY_PAGE_KEYS.map((key) => ({ name: `sp_${key}`, selector: { navigation: {} } })),
-        Object.fromEntries(SUMMARY_PAGE_KEYS.map((key) => [`sp_${key}`, this._form.summary_pages[key] ?? ""])),
-        (v) => {
-          this._form.summary_pages = Object.fromEntries(
-            SUMMARY_PAGE_KEYS.map((key) => [key, v[`sp_${key}`] || undefined]).filter(([, page]) => page)
-          );
-          this._emit();
-        }
-      ),
       this._haForm(
         [
           { name: "strip_area_names", selector: { boolean: {} } },
@@ -494,7 +501,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     if (!own) {
       const hint = this._hint("editor_h_source_builtin_hint");
       hint.style.marginTop = "8px";
-      block.append(hint);
+      const list = document.createElement("div");
+      list.className = "list home-items";
+      block.append(hint, this._subheading("editor_summary_pages"), this._hint("editor_summary_pages_help"), list);
+      // Order and visibility come from the built-in Overview; only the pages are set here
+      for (const key of SUMMARY_PAGE_KEYS) list.append(this._summaryPanel({ type: "summary", key }));
       return;
     }
 
@@ -537,6 +548,83 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     block.append(actions);
   }
 
+  /** @param {string} key */
+  _summaryIcon(key) {
+    const icon = /** @type {any} */ (document.createElement("ha-icon"));
+    icon.icon = /** @type {Record<string, string>} */ (SUMMARY_KEY_ICONS)[key] || "mdi:view-dashboard";
+    icon.className = "summary-icon";
+    return icon;
+  }
+
+  /**
+   * Switch that shows or hides a summary.
+   * @param {any} item
+   * @param {() => void} onChange
+   */
+  _summaryToggle(item, onChange) {
+    const toggle = /** @type {any} */ (document.createElement(customElements.get("ha-switch") ? "ha-switch" : "input"));
+    if (toggle.localName === "input") toggle.type = "checkbox";
+    toggle.checked = !item.hidden;
+    toggle.title = this._t("editor_show");
+    toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${this._t(item.key)}`);
+    // inside a panel header: do not expand or collapse the panel
+    toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
+    toggle.addEventListener("change", () => {
+      if (toggle.checked) delete item.hidden;
+      else item.hidden = true;
+      onChange();
+      this._emit();
+    });
+    return toggle;
+  }
+
+  /**
+   * Summary without a page of its own (weather): a plain row.
+   * @param {any} item
+   * @param {HTMLElement[]} controls
+   */
+  _summaryRow(item, controls) {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = this._t(item.key);
+    row.append(this._summaryIcon(item.key), label, ...controls);
+    return row;
+  }
+
+  /**
+   * Summary with the page it leads to; expanding it shows the page field.
+   * @param {any} item
+   * @param {HTMLElement[]} [controls] order and visibility (own settings only)
+   */
+  _summaryPanel(item, controls = []) {
+    const key = item.key;
+    const pageText = () => (this._form.summary_pages[key] ? `→ ${this._form.summary_pages[key]}` : "");
+    const panel = this._panel(this._t(key), pageText(), this._openSummaries.has(key), (open) => {
+      if (open) this._openSummaries.add(key);
+      else this._openSummaries.delete(key);
+    }, { leading: this._summaryIcon(key), icons: controls });
+    panel.root.classList.add("summary-panel");
+    panel.body.append(
+      this._haForm(
+        [{ name: `sp_${key}`, selector: { navigation: {} } }],
+        { [`sp_${key}`]: this._form.summary_pages[key] ?? "" },
+        (v) => {
+          const page = v[`sp_${key}`];
+          if (page) this._form.summary_pages = { ...this._form.summary_pages, [key]: page };
+          else {
+            const { [key]: _removed, ...rest } = this._form.summary_pages;
+            this._form.summary_pages = rest;
+          }
+          panel.setHeader(this._t(key), pageText());
+          this._emit();
+        }
+      )
+    );
+    return panel.root;
+  }
+
   /** @param {HTMLElement} list */
   _renderHomeItems(list) {
     list.innerHTML = "";
@@ -561,33 +649,31 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
     items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
       if (item.type === "summary") {
-        const row = document.createElement("div");
-        row.className = `item-row${item.hidden ? " off" : ""}`;
-        const icon = /** @type {any} */ (document.createElement("ha-icon"));
-        icon.icon = /** @type {Record<string, string>} */ (SUMMARY_KEY_ICONS)[item.key] || "mdi:view-dashboard";
-        const label = document.createElement("span");
-        label.className = "label";
-        label.textContent = this._t(item.key);
-        const toggle = /** @type {any} */ (document.createElement(customElements.get("ha-switch") ? "ha-switch" : "input"));
-        if (toggle.localName === "input") toggle.type = "checkbox";
-        toggle.checked = !item.hidden;
-        toggle.title = this._t("editor_show");
-        toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${label.textContent}`);
-        toggle.addEventListener("change", () => {
-          if (toggle.checked) delete item.hidden;
-          else item.hidden = true;
-          row.classList.toggle("off", !!item.hidden);
-          this._emit();
-        });
-        row.append(icon, label, ...moveButtons(index), toggle);
+        const toggle = this._summaryToggle(item, () => row.classList.toggle("off", !!item.hidden));
+        const controls = [...moveButtons(index), toggle];
+        const row = SUMMARY_PAGE_KEYS.includes(item.key) ? this._summaryPanel(item, controls) : this._summaryRow(item, controls);
+        row.classList.toggle("off", !!item.hidden);
         list.append(row);
         return;
       }
       const header = () => item.label || item.path || this._t("editor_shortcut_new");
+      const leading = /** @type {any} */ (document.createElement("ha-icon"));
+      leading.icon = item.icon || "mdi:link";
+      leading.className = "summary-icon";
+      const controls = [
+        ...moveButtons(index),
+        this._iconButton(ICON.delete, this._t("editor_delete_shortcut"), () => {
+          items.splice(index, 1);
+          this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          rerender();
+          this._emit();
+        }),
+      ];
       const panel = this._panel(header(), item.label ? item.path || "" : "", this._openShortcuts.has(index), (open) => {
         if (open) this._openShortcuts.add(index);
         else this._openShortcuts.delete(index);
-      });
+      }, { leading, icons: controls });
+      panel.root.classList.add("summary-panel");
       const form = this._haForm(
         [
           { name: "s_path", required: true, selector: { navigation: {} } },
@@ -603,22 +689,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           item.label = v.s_label || undefined;
           item.icon = v.s_icon || undefined;
           item.color = v.s_color || undefined;
+          leading.icon = item.icon || "mdi:link";
           panel.setHeader(header(), item.label ? item.path || "" : "");
           this._emit();
         }
       );
-      const row = document.createElement("div");
-      row.className = "row icons";
-      row.append(
-        ...moveButtons(index),
-        this._iconButton(ICON.delete, this._t("editor_delete_shortcut"), () => {
-          items.splice(index, 1);
-          this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-          rerender();
-          this._emit();
-        })
-      );
-      panel.body.append(form, row);
+      panel.body.append(form);
       list.append(panel.root);
     });
   }

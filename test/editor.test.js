@@ -42,6 +42,12 @@ const areaPanels = (editor) => [...root(editor).querySelectorAll("details.area-p
 const summary = (panel) => panel.querySelector(":scope > summary").textContent;
 const areaPanel = (editor, name) => areaPanels(editor).find((p) => summary(p).startsWith(name));
 
+/** Labels of the summaries and shortcuts list (panels and plain rows). */
+const homeItemLabels = (editor) =>
+  [...root(editor).querySelectorAll(".home-items > *")].map((el) =>
+    el.matches("details") ? el.querySelector(":scope > summary > span").textContent : el.querySelector(".label").textContent
+  );
+
 const TWO_AREAS = {
   type: "custom:overview-plus",
   area_overrides: {
@@ -332,7 +338,7 @@ test("overview page: built-in settings by default, own settings as form fields",
   const own = setup({ type: "custom:overview-plus", load_home_settings: false, favorite_entities: ["light.lamp"], shortcuts: [{ type: "summary", key: "energy" }] });
   const fields = formWith(root(own.editor), "h_favorites");
   assert.deepEqual(fields.data.h_favorites, ["light.lamp"]);
-  const rows = [...root(own.editor).querySelectorAll(".item-row .label")].map((l) => l.textContent);
+  const rows = homeItemLabels(own.editor);
   assert.equal(rows[0], "Today's energy", "summaries in the saved order");
   assert.equal(rows.length, 7);
 });
@@ -343,7 +349,7 @@ test("overview page: editing favorites, hiding a summary, adding a shortcut", ()
   assert.deepEqual(last().favorite_entities, ["light.lamp", "climate.living"]);
   assert.equal(last().hide_welcome_message, true);
 
-  const toggle = root(editor).querySelector(".item-row input");
+  const toggle = root(editor).querySelector(".home-items input[type=checkbox]");
   toggle.checked = false;
   toggle.dispatchEvent(new Event("change"));
   assert.deepEqual(last().shortcuts[0], { type: "summary", key: "light", hidden: true });
@@ -374,4 +380,19 @@ test("overview page: switching to own settings copies those of the built-in Over
   edit(formWith(root(editor), "h_source"), { h_source: "builtin" });
   assert.equal(last().load_home_settings, undefined);
   assert.deepEqual(last().favorite_entities, ["light.ceiling"]);
+});
+
+test("summary pages are set on the summary itself, also with the built-in settings", () => {
+  const own = setup({ type: "custom:overview-plus", load_home_settings: false });
+  const lights = formWith(root(own.editor), "sp_light");
+  assert.ok(lights, "page field inside the Lights summary");
+  assert.equal(formWith(root(own.editor), "sp_weather"), undefined, "weather has no page");
+  edit(lights, { sp_light: "/lights-plus/0" });
+  assert.deepEqual(own.last().summary_pages, { light: "/lights-plus/0" });
+  assert.ok(homeItemLabels(own.editor).includes("Lights"));
+
+  const builtin = setup({ type: "custom:overview-plus", summary_pages: { security: "/alarm" } });
+  assert.equal(formWith(root(builtin.editor), "sp_security").data.sp_security, "/alarm");
+  edit(formWith(root(builtin.editor), "sp_security"), { sp_security: "" });
+  assert.equal(builtin.last().summary_pages, undefined);
 });
