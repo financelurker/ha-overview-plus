@@ -9,7 +9,9 @@
  *
  * With `area_overrides.<area_id>.sections` the standard categories are not built.
  * Instead the configured sections come first, in order, followed by all remaining
- * devices of the area (and automations), as in the default view.
+ * devices of the area (and automations), as in the default view. An entity is shown
+ * in the first section that selects it; entities of a device that no section shows
+ * appear in that device's card below.
  */
 
 import { createCardFactory } from "../card-factory.js";
@@ -233,8 +235,6 @@ export function generateAreaView(hass, areaId, options = {}) {
 
   // ---------------------------------------------------- highlighted sections
   if (hasOverride) {
-    /** @type {Set<string>} */
-    const claimedDevices = new Set();
     for (const [index, section] of /** @type {OverrideSection[]} */ (override.sections).entries()) {
       // A section without selection matches nothing (not everything), so an empty
       // section added in the editor does not swallow the whole area.
@@ -243,18 +243,13 @@ export function generateAreaView(hass, areaId, options = {}) {
         !(Array.isArray(section.match) && section.match.length === 0) &&
         !(typeof section.match === "object" && !Array.isArray(section.match) && Object.keys(section.match).length === 0);
       const matched = hasMatch
-        ? all.filter(
-            (ctx) => !consumed.has(ctx.entity_id) && !(ctx.device && claimedDevices.has(ctx.device.id)) && matches(section.match, ctx)
-          )
+        ? all.filter((ctx) => !consumed.has(ctx.entity_id) && matches(section.match, ctx))
         : [];
-      // A device belongs to the first section that matches any of its entities
-      for (const ctx of matched) {
-        consumed.add(ctx.entity_id);
-        if (ctx.device) claimedDevices.add(ctx.device.id);
-      }
-      for (const ctx of all) if (ctx.device && claimedDevices.has(ctx.device.id)) consumed.add(ctx.entity_id);
-
+      // An entity belongs to the first section that shows it. Other entities of the same
+      // device stay available for later sections and the remaining devices below, as in
+      // the built-in area view (where the categories take single entities of a device).
       const shown = matched.filter(selectionFilter(section.entities));
+      for (const ctx of shown) consumed.add(ctx.entity_id);
       const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined);
       report.sections.push({
         title: section.title ?? `#${index + 1}`,
