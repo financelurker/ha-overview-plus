@@ -7,7 +7,8 @@
  * are kept in a YAML fallback field (`m_yaml`, `e_yaml`, `p_yaml`).
  *
  * Form shape:
- *   load_home_settings: boolean
+ *   load_home_settings: boolean        true = overview page settings of the built-in Overview
+ *   home: { welcome, suggested, favorites, alerts, alert_extra, items }   own overview page settings
  *   debug: boolean
  *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_tap, r_popup_type, r_popup_options,
  *            r_scope, r_contexts, r_stop, m_* }]
@@ -21,8 +22,10 @@
  * and the same criteria as exclusions (m_not_*). Primary entity: p_domain, p_device_class (lists).
  */
 
+import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
+
 /** Keys of the strategy config managed by the form. */
-const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides"];
+const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", ...HOME_KEYS];
 
 /** Selection criteria editable as fields (all accept one or more values). */
 export const MATCH_FIELDS = [
@@ -237,6 +240,62 @@ function formToRule(form) {
   return rule;
 }
 
+// ------------------------------------------------------- overview page settings
+
+/**
+ * Overview page settings (the keys of HOME_KEYS) as form data.
+ * @param {Record<string, any>} settings
+ */
+export function homeToForm(settings) {
+  /** @type {Record<string, Record<string, any>>} other fields of an alert entity (e.g. severity) */
+  const alertExtra = {};
+  /** @type {string[]} */
+  const alerts = [];
+  for (const item of Array.isArray(settings.alert_entities) ? settings.alert_entities : []) {
+    if (typeof item === "string") alerts.push(item);
+    else if (isPlainObject(item) && typeof item.entity === "string") {
+      const { entity, ...extra } = item;
+      alerts.push(entity);
+      if (Object.keys(extra).length) alertExtra[entity] = extra;
+    }
+  }
+  return {
+    welcome: settings.hide_welcome_message !== true,
+    suggested: settings.hide_suggested_entities !== true,
+    favorites: toList(settings.favorite_entities),
+    alerts,
+    alert_extra: alertExtra,
+    items: resolveShortcutItems(settings.shortcuts).map((item) => ({ ...item })),
+  };
+}
+
+/** Summary list without changes: all built-in summaries, default order, none hidden. */
+const DEFAULT_ITEMS = JSON.stringify(DEFAULT_SUMMARY_KEYS.map((key) => ({ type: "summary", key })));
+
+/**
+ * Form data back to the overview page settings; settings at their default are left out.
+ * @param {Record<string, any> | undefined} home
+ */
+export function homeFromForm(home) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  if (!home) return out;
+  if (home.favorites?.length) out.favorite_entities = [...home.favorites];
+  if (home.welcome === false) out.hide_welcome_message = true;
+  if (home.suggested === false) out.hide_suggested_entities = true;
+  const items = (Array.isArray(home.items) ? home.items : [])
+    .filter((/** @type {any} */ item) => item?.type === "summary" || item?.path)
+    .map((/** @type {any} */ item) =>
+      item.type === "summary"
+        ? { type: "summary", key: item.key, ...(item.hidden ? { hidden: true } : {}) }
+        : dropEmpty({ ...item, label: item.label || undefined, icon: item.icon || undefined, color: item.color || undefined })
+    );
+  if (JSON.stringify(items) !== DEFAULT_ITEMS) out.shortcuts = items;
+  const alerts = (home.alerts || []).map((/** @type {string} */ entity) => ({ entity, ...(home.alert_extra?.[entity] || {}) }));
+  if (alerts.length) out.alert_entities = alerts;
+  return out;
+}
+
 // ------------------------------------------------------------------ public
 
 /**
@@ -247,6 +306,7 @@ export function toForm(config) {
   const overrides = isPlainObject(config.area_overrides) ? config.area_overrides : {};
   return {
     load_home_settings: config.load_home_settings !== false,
+    home: homeToForm(config),
     strip_area_names: config.strip_area_names !== false,
     lazy_render: config.lazy_render !== false,
     debug: config.debug === true,
@@ -288,6 +348,8 @@ export function fromForm(form, original) {
   const config = Object.fromEntries(Object.entries(original).filter(([k]) => !MANAGED.includes(k)));
 
   if (form.load_home_settings === false) config.load_home_settings = false;
+  // Own settings are kept while the built-in ones are used, so switching back restores them
+  Object.assign(config, homeFromForm(form.home));
   if (form.strip_area_names === false) config.strip_area_names = false;
   if (form.lazy_render === false) config.lazy_render = false;
   if (form.debug === true) config.debug = true;

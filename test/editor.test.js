@@ -322,3 +322,56 @@ test("rule summary names every criterion, exclusions included", async () => {
   );
   assert.equal(matchSummary(ctx, {}), "");
 });
+
+test("overview page: built-in settings by default, own settings as form fields", () => {
+  const { editor } = setup({ type: "custom:overview-plus" });
+  const source = formWith(root(editor), "h_source");
+  assert.equal(source.data.h_source, "builtin");
+  assert.equal(formWith(root(editor), "h_favorites"), undefined, "no own fields while the built-in settings are used");
+
+  const own = setup({ type: "custom:overview-plus", load_home_settings: false, favorite_entities: ["light.lamp"], shortcuts: [{ type: "summary", key: "energy" }] });
+  const fields = formWith(root(own.editor), "h_favorites");
+  assert.deepEqual(fields.data.h_favorites, ["light.lamp"]);
+  const rows = [...root(own.editor).querySelectorAll(".item-row .label")].map((l) => l.textContent);
+  assert.equal(rows[0], "Today's energy", "summaries in the saved order");
+  assert.equal(rows.length, 7);
+});
+
+test("overview page: editing favorites, hiding a summary, adding a shortcut", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus", load_home_settings: false });
+  edit(formWith(root(editor), "h_favorites"), { h_favorites: ["light.lamp", "climate.living"], h_welcome: false });
+  assert.deepEqual(last().favorite_entities, ["light.lamp", "climate.living"]);
+  assert.equal(last().hide_welcome_message, true);
+
+  const toggle = root(editor).querySelector(".item-row input");
+  toggle.checked = false;
+  toggle.dispatchEvent(new Event("change"));
+  assert.deepEqual(last().shortcuts[0], { type: "summary", key: "light", hidden: true });
+
+  click(buttons(root(editor), "Add shortcut")[0]);
+  edit(formWith(root(editor), "s_path"), { s_path: "/lovelace/plan", s_label: "Plan" });
+  assert.deepEqual(last().shortcuts.at(-1), { type: "custom", path: "/lovelace/plan", label: "Plan" });
+});
+
+test("overview page: switching to own settings copies those of the built-in Overview", async () => {
+  const { editor, last } = setup({ type: "custom:overview-plus" });
+  editor.hass = {
+    ...editor.hass,
+    callWS: async ({ key }) => ({
+      value: key === "home"
+        ? { favorite_entities: ["light.ceiling"], hide_suggested_entities: true }
+        : { alert_entities: [{ entity: "binary_sensor.door", severity: "alert" }] },
+    }),
+  };
+  edit(formWith(root(editor), "h_source"), { h_source: "own" });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(last().load_home_settings, false);
+  assert.deepEqual(last().favorite_entities, ["light.ceiling"]);
+  assert.equal(last().hide_suggested_entities, true);
+  assert.deepEqual(last().alert_entities, [{ entity: "binary_sensor.door", severity: "alert" }]);
+
+  // back to the built-in settings: the own ones are kept for later
+  edit(formWith(root(editor), "h_source"), { h_source: "builtin" });
+  assert.equal(last().load_home_settings, undefined);
+  assert.deepEqual(last().favorite_entities, ["light.ceiling"]);
+});

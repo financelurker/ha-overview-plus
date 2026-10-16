@@ -14,7 +14,10 @@
 import { AREA_TILE_TYPE } from "../area-tile-card.js";
 import { createCardFactory } from "../card-factory.js";
 import { findEntities, isOtherDeviceEntity, simpleFilter, SUMMARY_FILTERS } from "../entity-filter.js";
+import { resolveShortcutItems } from "../home-settings.js";
 import { t } from "../i18n.js";
+
+export { resolveShortcutItems };
 import { domainOf, entityContext, entityCategory } from "../registry.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
@@ -39,7 +42,6 @@ const MAINTENANCE_FILTERS = [
   { domain: "binary_sensor", device_class: ["battery"] },
 ];
 
-const DEFAULT_SUMMARY_KEYS = ["light", "climate", "security", "media_players", "maintenance", "weather", "energy"];
 
 const DANGER_BINARY_SENSOR_CLASSES = new Set(["carbon_monoxide", "gas", "glass_break", "moisture", "safety", "smoke"]);
 
@@ -83,25 +85,6 @@ export function floorIcon(floor) {
     case -1: return "mdi:home-floor-negative-1";
     default: return "mdi:home";
   }
-}
-
-/**
- * Built-in summary keys missing from the saved list are appended in default order;
- * unknown and duplicate summary keys are dropped.
- * @param {any[] | undefined} saved
- */
-export function resolveShortcutItems(saved) {
-  const result = [];
-  const seen = new Set();
-  for (const item of saved || []) {
-    if (item?.type === "summary") {
-      if (!DEFAULT_SUMMARY_KEYS.includes(item.key) || seen.has(item.key)) continue;
-      seen.add(item.key);
-    }
-    result.push(item);
-  }
-  for (const key of DEFAULT_SUMMARY_KEYS) if (!seen.has(key)) result.push({ type: "summary", key });
-  return result;
 }
 
 /** @param {any} stateObj */
