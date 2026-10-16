@@ -11,6 +11,7 @@ what the built-in dashboard does not let you change:
 - **Area overrides:** define your own highlighted sections for an area (title, icon, order, layout),
   matched by labels or integrations, followed by all remaining devices of that area.
 - **Area tiles:** choose what an area's tile on the overview page shows instead of temperature/humidity.
+- **Popups:** open a card of your choice when a card is tapped, instead of the entity's info dialog.
 
 ## Screenshots
 
