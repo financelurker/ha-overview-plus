@@ -136,27 +136,6 @@ const newAreaEntry = (area) => ({
 
 /** Titles of the top-level parts. */
 const TOP_TITLES = { home: "editor_home", areas: "editor_areas", general: "editor_general" };
-const OPEN_KEY = "overview-plus:editor-open";
-
-/** Expanded top-level parts, remembered in this browser (best effort). @returns {Set<string>} */
-function loadOpenTop() {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(OPEN_KEY) || "[]");
-    return new Set(Array.isArray(saved) ? saved : []);
-  } catch {
-    return new Set();
-  }
-}
-
-/** @param {Set<string>} open */
-function saveOpenTop(open) {
-  try {
-    window.localStorage.setItem(OPEN_KEY, JSON.stringify([...open]));
-  } catch {
-    // storage not available: the state is kept for this editor only
-  }
-}
-
 class OverviewPlusStrategyEditor extends HTMLElement {
   constructor() {
     super();
@@ -179,8 +158,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openSummaries = new Set();
     /** @type {Set<string>} presets of expanded area indicator blocks */
     this._openIndicators = new Set();
-    /** @type {Set<string>} expanded top-level parts (home, areas, general) */
-    this._openTop = loadOpenTop();
+    /**
+     * Expanded top-level parts and parts of the overview page. Every editor starts
+     * collapsed; the state only lives while the dialog is open (re-renders keep it).
+     * @type {Set<string>}
+     */
+    this._openTop = new Set();
     /** @type {Record<string, (header: string, secondary: string) => void>} */
     this._topHeaders = {};
     /** @type {Record<string, (secondary: string) => void>} */
@@ -485,7 +468,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const panel = this._panel(this._t(TOP_TITLES[key]), "", this._openTop.has(key), (open) => {
       if (open) this._openTop.add(key);
       else this._openTop.delete(key);
-      saveOpenTop(this._openTop);
     });
     panel.root.classList.add("top", `top-${key}`);
     this._topHeaders[key] = panel.setHeader;
@@ -648,7 +630,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   }
 
   /**
-   * A collapsible part inside "Overview page"; its open state is remembered like the top-level parts.
+   * A collapsible part inside "Overview page"; it stays open or closed across re-renders like the top-level parts.
    * @param {"summaries" | "indicators"} key
    * @param {string} titleKey
    */
@@ -659,7 +641,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const panel = this._panel(this._t(titleKey), "", this._openTop.has(id), (open) => {
       if (open) this._openTop.add(id);
       else this._openTop.delete(id);
-      saveOpenTop(this._openTop);
     });
     panel.root.classList.add("sub", `sub-${key}`);
     this._subHeaders[key] = (/** @type {string} */ secondary) => panel.setHeader(this._t(titleKey), secondary);

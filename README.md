@@ -87,8 +87,7 @@ built-in Overview that were added up to that release.
 
 Settings → Dashboards → **Add dashboard** → *Community dashboards* → **Overview Plus**.
 
-To configure it, open the dashboard → ✏️ (edit). The visual editor has three collapsible parts (the
-open ones are remembered in the browser):
+To configure it, open the dashboard → ✏️ (edit). The visual editor has three collapsible parts:
 
 - **Overview page:** welcome message, favorites, suggested entities, summaries and shortcuts, alert
   entities – the same as in the built-in Overview, or own settings for this dashboard. *Summaries and shortcuts* (with the
