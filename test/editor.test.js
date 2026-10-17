@@ -450,3 +450,24 @@ test("the editor works when the browser storage is not available", () => {
     if (original) Object.defineProperty(win, "localStorage", original);
   }
 });
+
+test("summaries and area states are collapsible parts of the overview page, with a summary", () => {
+  window.localStorage.removeItem("overview-plus:editor-open");
+  const { editor } = setup({
+    type: "custom:overview-plus",
+    load_home_settings: false,
+    shortcuts: [{ type: "summary", key: "light", hidden: true }, { type: "custom", path: "/map" }],
+    summary_pages: { climate: "/heat" },
+    area_indicators: [{ preset: "occupied" }, { preset: "heating" }],
+  });
+  const sub = (key) => root(editor).querySelector(`details.sub-${key}`);
+  const text = (key) => sub(key).querySelector(":scope > summary").textContent;
+  assert.ok(sub("summaries") && !sub("summaries").open);
+  assert.ok(sub("indicators") && !sub("indicators").open);
+  assert.match(text("summaries"), /6 of 7 shown · 1 shortcut · 1 with own page$/);
+  assert.match(text("indicators"), /2 switched on$/);
+
+  const builtin = setup({ type: "custom:overview-plus" });
+  assert.match(root(builtin.editor).querySelector("details.sub-summaries > summary").textContent, /Home Assistant's pages$/);
+  assert.match(root(builtin.editor).querySelector("details.sub-indicators > summary").textContent, /None switched on$/);
+});
