@@ -53,10 +53,10 @@ parts, each with a short summary of what is set.
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=a48dda084d" alt="Editor: card rule with popup"></td>
-<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=1329cef219" alt="Editor: pages of the summaries"></td>
+<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=8be433563d" alt="Editor: pages of the summaries"></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=4fa1ff57fa" alt="Editor: area states"></td>
+<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=c73ec15d4b" alt="Editor: area states"></td>
 <td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=b927038a82" alt="Overview page on a phone"></td>
 </tr>
 </table>
