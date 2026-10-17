@@ -493,3 +493,99 @@ test("removing an area layout is a red action on the far side, away from Add sec
   assert.equal(row.firstElementChild.textContent, "Add section");
   assert.equal(row.lastElementChild, remove);
 });
+
+test("copying the built-in settings sits under the settings choice, red, and asks first", async () => {
+  const { editor, last, events } = setup({ type: "custom:overview-plus", load_home_settings: false, favorite_entities: ["light.lamp"] });
+  let calls = 0;
+  editor.hass = { ...editor.hass, callWS: async ({ key }) => { calls++; return { value: key === "home" ? { favorite_entities: ["light.ceiling"] } : {} }; } };
+  const copy = buttons(root(editor), "Copy from the built-in Overview")[0];
+  assert.ok(copy.classList.contains("danger"));
+  const row = copy.closest(".copy-home");
+  assert.equal(row.previousElementSibling, formWith(root(editor), "h_source"), "right below the settings choice");
+  assert.equal(buttons(root(editor), "Add shortcut")[0].parentElement.querySelector(".copy-home"), null);
+
+  click(copy);
+  assert.equal(calls, 0, "nothing replaced before confirming");
+  assert.match(row.textContent, /Replace your own favorites/);
+  click(buttons(row, "Cancel")[0]);
+  assert.ok(buttons(row, "Copy from the built-in Overview")[0], "cancel restores the button");
+  const before = events.length;
+
+  click(buttons(row, "Copy from the built-in Overview")[0]);
+  click(buttons(row, "Replace")[0]);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(calls, 2);
+  assert.ok(events.length > before);
+  assert.deepEqual(last().favorite_entities, ["light.ceiling"]);
+});
+
+test("shortcuts: only arrows in the header, deleting is a red button in the expanded part", () => {
+  const { editor, last } = setup({
+    type: "custom:overview-plus", load_home_settings: false,
+    shortcuts: [{ type: "custom", path: "/a", label: "A" }, { type: "custom", path: "/b", label: "B" }],
+  });
+  const panel = [...root(editor).querySelectorAll(".home-items > details")].find((p) => p.querySelector(":scope > summary").textContent.includes("A"));
+  // the header controls (in the fallback: their own row) are the arrows only
+  const moves = buttons(panel, "Move down")[0].parentElement;
+  assert.equal(buttons(moves, "Delete shortcut").length, 0);
+  assert.equal(moves.querySelectorAll("button").length, 2);
+  const remove = buttons(panel, "Delete shortcut")[0];
+  assert.ok(remove.classList.contains("danger"));
+  assert.equal(remove.parentElement, panel.querySelector(".panel-body").lastElementChild, "at the end of the expanded part");
+  click(remove);
+  assert.deepEqual(last().shortcuts.filter((s) => s.type === "custom").map((s) => s.label), ["B"]);
+});
+
+test("sections and rules: arrows on the left, red delete button on the right", () => {
+  const { editor } = setup({ ...TWO_AREAS, card_rules: [{ match: { domain: "light" }, card: { type: "tile" } }] });
+  for (const [scope, label] of [[areaPanel(editor, "Ground › Living room"), "Delete section"], [root(editor).querySelector(".general"), "Delete rule"]]) {
+    const remove = buttons(scope, label)[0];
+    assert.ok(remove.classList.contains("danger"), label);
+    const row = remove.parentElement;
+    assert.ok(row.classList.contains("split"));
+    assert.equal(row.lastElementChild, remove);
+    assert.ok(row.firstElementChild.classList.contains("moves"));
+    assert.ok(buttons(row.firstElementChild, "Move down").length === 1);
+  }
+});
+
+test("own area states: red delete with distance, only after confirming", () => {
+  const custom = { name: "Washer", entity: "sensor.washer", state: "running" };
+  const { editor, last, events } = setup({ type: "custom:overview-plus", area_indicators: [{ preset: "occupied" }, custom] });
+  const scope = root(editor).querySelector(".indicator-items");
+  const remove = buttons(scope, "Delete state")[0];
+  assert.ok(remove.classList.contains("delete-icon"));
+  const row = remove.parentElement;
+  click(remove);
+  assert.equal(events.length, 0, "nothing deleted before confirming");
+  assert.match(row.textContent, /Delete "Washer"\?/);
+  click(buttons(row, "Cancel")[0]);
+  assert.ok(buttons(row, "Delete state")[0]);
+  click(buttons(row, "Delete state")[0]);
+  click(buttons(row, "Delete")[0]);
+  assert.deepEqual(last().area_indicators, [{ preset: "occupied" }]);
+});
+
+test("confirmations: the action runs once, after a cancel the right item is deleted", async () => {
+  const states = [{ name: "Washer", entity: "sensor.washer" }, { name: "Dryer", entity: "sensor.dryer" }];
+  const { editor, last } = setup({ type: "custom:overview-plus", area_indicators: states });
+  const scope = root(editor).querySelector(".indicator-items");
+  const row = buttons(scope, "Delete state")[1].parentElement;
+  click(buttons(row, "Delete state")[0]);
+  assert.equal(row.querySelector(".confirm").getAttribute("role"), "alertdialog");
+  click(buttons(row, "Cancel")[0]);
+  click(buttons(row, "Delete state")[0]);
+  click(buttons(row, "Delete")[0]);
+  assert.deepEqual(last().area_indicators, [states[0]]);
+
+  const own = setup({ type: "custom:overview-plus", load_home_settings: false });
+  let calls = 0;
+  own.editor.hass = { ...own.editor.hass, callWS: async () => { calls++; return { value: {} }; } };
+  const copyRow = root(own.editor).querySelector(".copy-home");
+  click(buttons(copyRow, "Copy from the built-in Overview")[0]);
+  const replace = buttons(copyRow, "Replace")[0];
+  click(replace);
+  click(replace);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(calls, 2, "one copy (home + security), not two");
+});

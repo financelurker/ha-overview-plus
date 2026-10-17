@@ -48,12 +48,12 @@ parts, each with a short summary of what is set.
 
 <table>
 <tr>
-<td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=2f50c95543" alt="Editor: overview page settings"></td>
-<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=422c71836a" alt="Editor: area layout with sections"></td>
+<td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=d81f8714d2" alt="Editor: overview page settings"></td>
+<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=ea4db61136" alt="Editor: area layout with sections"></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=a48dda084d" alt="Editor: card rule with popup"></td>
-<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=3549513610" alt="Editor: pages of the summaries"></td>
+<td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup"></td>
+<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=a5669ad4ca" alt="Editor: pages of the summaries"></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=107427816f" alt="Editor: area states"></td>
