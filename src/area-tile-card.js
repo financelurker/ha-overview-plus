@@ -19,9 +19,29 @@
  * src/panels/lovelace/cards/hui-area-card.ts (compact display type).
  */
 
+import { entityAreaId, evaluateIndicators, indicatorColor, INDICATOR_PRESETS, prepareIndicators, watchedIndicators } from "./area-indicators.js";
+import { t } from "./i18n.js";
+
+/** Presets have translated names (indicator_<preset>). */
+const INDICATOR_KEYS = INDICATOR_PRESETS;
+
+/**
+ * @typedef {Object} AreaCache
+ * @property {any} entities
+ * @property {any} devices
+ * @property {any} areas
+ * @property {any} config
+ * @property {{ indicator: any, config: any, candidates: string[] }[]} prepared
+ * @property {{ entities: string[], attributes: string[] }} watch
+ * @property {string[]} sensors        sensors of the area (for sensor_classes)
+ * @property {string[]} binarySensors  binary sensors of the area (for alert_classes)
+ */
+
 export const AREA_TILE_TYPE = "custom:overview-plus-area-tile";
 const TAG = "overview-plus-area-tile";
 const SEPARATOR = " · ";
+/** Most chips in the row; with more active indicators the last chip shows "+N". */
+const MAX_CHIPS = 4;
 // mdiTextureBox, the default icon of the area card
 const AREA_ICON_PATH = "M20 2H4C2.9 2 2 2.9 2 4V20C2 21.11 2.9 22 4 22H20C21.11 22 22 21.11 22 20V4C22 2.9 21.11 2 20 2M4 6L6 4H10.9L4 10.9V6M4 13.7L13.7 4H18.6L4 18.6V13.7M20 18L18 20H13.1L20 13.1V18M20 10.3L10.3 20H5.4L20 5.4V10.3Z";
 
@@ -40,6 +60,24 @@ const STYLE = `
   ha-tile-info.twoline { --_tile-info-fixed-primary-line-height: var(--ha-space-4); }
   ha-tile-info.twoline::part(primary) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
     white-space: normal; overflow-wrap: anywhere; }
+  /* Area indicators (area-indicators.js): tinted tile and a row of chips above the room icon */
+  ha-card { position: relative; }
+  ha-card { --tile-bg: var(--ha-card-background, var(--card-background-color, #fff)); }
+  ha-card.tinted {
+    --tile-bg: color-mix(in srgb, var(--indicator-color) 16%, var(--ha-card-background, var(--card-background-color, #fff)));
+    background: var(--tile-bg);
+    border-color: color-mix(in srgb, var(--indicator-color) 45%, transparent);
+  }
+  /* Space for the chips is kept whenever states are configured, so icons do not jump */
+  ha-card.has-indicators.vertical ha-tile-container { transform: translateY(8px); }
+  .chips { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
+  ha-card:not(.vertical) .chips { top: 50%; left: auto; right: 10px; transform: translateY(-50%); }
+  .chip { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: #fff; background: var(--chip-color); box-shadow: 0 0 0 2px var(--tile-bg);
+    font-size: 11px; font-weight: 600; box-sizing: border-box; cursor: pointer; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .chip ha-icon { --mdc-icon-size: 13px; display: flex; }
+  .chip.more { background: var(--secondary-text-color); }
   .fallback { display: flex; flex-direction: column; justify-content: center; gap: 2px; height: 100%; padding: 10px;
     box-sizing: border-box; cursor: pointer; }
   .fallback .primary { font-weight: 500; }
@@ -49,12 +87,6 @@ const STYLE = `
 /** @param {any} v @returns {any[]} */
 const list = (v) => (Array.isArray(v) ? v : v ? [v] : []);
 
-/** @param {string} color */
-function cssColor(color) {
-  if (!color) return undefined;
-  // Theme colors as in Home Assistant's computeCssColor: "red" → var(--red-color)
-  return /^[a-z-]+$/.test(color) && !["none", "inherit", "transparent"].includes(color) ? `var(--${color}-color)` : color;
-}
 
 /** Defines the element; only in a browser (the module is also imported by generators). */
 function define() {
@@ -70,6 +102,9 @@ function define() {
       this._key = "";
       /** @type {any} */
       this._layout = undefined;
+      /** @type {AreaCache | undefined} */
+      this._cache = undefined;
+      this._waitingForTile = false;
     }
 
     /** @param {any} v set by Home Assistant ("grid" in sections views) */
@@ -113,7 +148,16 @@ function define() {
 
     /** Entities whose state is shown; the tile only re-renders when one of them changes. */
     _watched() {
-      return [...this._entityIds(), ...this._alertCandidates()];
+      if (!this._hass || !this._config) return [];
+      const cache = this._cached();
+      const classes = list(this._config.alert_classes).length;
+      return [
+        ...this._entityIds(),
+        ...list(this._config.alert_entities),
+        ...(classes ? cache.binarySensors : []),
+        ...cache.watch.entities,
+        ...(this._sensorClasses().length ? cache.sensors : []),
+      ];
     }
 
     _watchKey() {
@@ -122,7 +166,11 @@ function define() {
       const area = hass.areas?.[this._config.area];
       return JSON.stringify([
         area?.name, area?.icon, hass.locale?.language,
-        ...this._watched().map((id) => [hass.states[id]?.state, hass.states[id]?.attributes?.unit_of_measurement]),
+        ...this._watched().map((id) => {
+          const attrs = hass.states[id]?.attributes;
+          return [hass.states[id]?.state, attrs?.unit_of_measurement, attrs?.device_class,
+            ...this._cached().watch.attributes.map((name) => attrs?.[name])];
+        }),
       ]);
     }
 
@@ -137,19 +185,60 @@ function define() {
       const ids = [...list(this._config?.alert_entities)];
       const classes = list(this._config?.alert_classes);
       if (classes.length && hass) {
-        for (const [id, entry] of Object.entries(hass.entities || {})) {
-          if (!id.startsWith("binary_sensor.") || entry.hidden || entry.entity_category) continue;
-          const device = entry.device_id ? hass.devices?.[entry.device_id] : undefined;
-          const areaId = entry.area_id || device?.area_id || (device?.parent_device_id ? hass.devices?.[device.parent_device_id]?.area_id : undefined);
-          if (areaId !== this._config.area) continue;
-          if (classes.includes(hass.states[id]?.attributes?.device_class)) ids.push(id);
-        }
+        ids.push(...this._cached().binarySensors.filter((id) => classes.includes(hass.states?.[id]?.attributes?.device_class)));
       }
       return ids;
     }
 
+    /**
+     * Sensor classes shown when no entities are selected, like the area card:
+     * `sensor_classes`, by default temperature if the area has a temperature sensor.
+     * @returns {string[]}
+     */
+    _sensorClasses() {
+      if (list(this._config.entities).length) return [];
+      if (Array.isArray(this._config.sensor_classes)) return this._config.sensor_classes;
+      return this._hass?.areas?.[this._config.area]?.temperature_entity_id ? ["temperature"] : [];
+    }
+
+    /**
+     * Sensors of the area per class: the area's own temperature / humidity sensor,
+     * otherwise all numeric sensors of that class (their average is shown).
+     * @returns {Record<string, string[]>}
+     */
+    _classSensors() {
+      const hass = this._hass;
+      const area = hass.areas?.[this._config.area];
+      /** @type {Record<string, string[]>} */
+      const result = {};
+      for (const cls of this._sensorClasses()) {
+        const own = cls === "temperature" ? area?.temperature_entity_id : cls === "humidity" ? area?.humidity_entity_id : undefined;
+        result[cls] = own ? [own] : this._cached().sensors.filter((id) => hass.states?.[id]?.attributes?.device_class === cls);
+      }
+      return result;
+    }
+
+    /** @param {string[]} ids */
+    _classValue(ids) {
+      const hass = this._hass;
+      const states = ids.map((id) => hass.states?.[id]).filter((s) => s && !isNaN(Number(s.state)) && s.state !== "");
+      if (!states.length) return undefined;
+      const format = (/** @type {any} */ stateObj, /** @type {string} */ value) =>
+        typeof hass.formatEntityState === "function" ? hass.formatEntityState(stateObj, value) : `${value} ${stateObj.attributes?.unit_of_measurement ?? ""}`.trim();
+      if (states.length === 1) return format(states[0], states[0].state);
+      const unit = states[0].attributes?.unit_of_measurement;
+      const same = states.filter((s) => s.attributes?.unit_of_measurement === unit);
+      const avg = same.reduce((sum, s) => sum + Number(s.state), 0) / same.length;
+      return format(same[0], String(Math.round(avg * 10) / 10));
+    }
+
     _secondary() {
       const hass = this._hass;
+      const classes = this._sensorClasses();
+      if (classes.length) {
+        const sensors = this._classSensors();
+        return classes.map((cls) => this._classValue(sensors[cls] || [])).filter(Boolean).join(SEPARATOR);
+      }
       const showNames = !!this._config.show_names;
       return list(this._config.entities)
         .map((e) => {
@@ -189,11 +278,20 @@ function define() {
       const primary = this._config.name || area?.name || this._config.area;
       const secondary = this._secondary();
       const card = document.createElement("ha-card");
-      const color = cssColor(this._config.color);
+      if (this._config.vertical) card.classList.add("vertical");
+      const color = indicatorColor(this._config.color);
       if (color) card.style.setProperty("--tile-color", color);
       root.appendChild(card);
 
       if (!customElements.get("ha-tile-container")) {
+        // Render again once Home Assistant has loaded the tile components
+        if (!this._waitingForTile) {
+          this._waitingForTile = true;
+          customElements.whenDefined("ha-tile-container").then(() => {
+            this._waitingForTile = false;
+            this._render();
+          });
+        }
         // Plain fallback if the tile components are not loaded (they normally are)
         const box = document.createElement("div");
         box.className = "fallback";
@@ -202,6 +300,7 @@ function define() {
         /** @type {HTMLElement} */ (box.querySelector(".secondary")).textContent = secondary;
         box.addEventListener("click", () => this._fireAction("tap"));
         card.appendChild(box);
+        this._renderIndicators(card);
         return;
       }
 
@@ -236,6 +335,107 @@ function define() {
 
       container.append(icon, info);
       card.appendChild(container);
+      this._renderIndicators(card);
+    }
+
+    /**
+     * What the tile needs from the registries: prepared area states and the area's
+     * sensors / binary sensors. Cached until the registries or the config change; device
+     * classes are read from the states when evaluating, as states may arrive later.
+     * @returns {AreaCache}
+     */
+    _cached() {
+      const hass = this._hass;
+      const cache = this._cache;
+      if (cache && cache.entities === hass.entities && cache.devices === hass.devices && cache.areas === hass.areas && cache.config === this._config) {
+        return cache;
+      }
+      /** @type {string[]} */
+      const sensors = [];
+      /** @type {string[]} */
+      const binarySensors = [];
+      const wantSensors = !list(this._config.entities).length;
+      const wantBinary = list(this._config.alert_classes).length > 0;
+      if (wantSensors || wantBinary) {
+        for (const [id, entry] of Object.entries(hass.entities || {})) {
+          const sensor = id.startsWith("sensor.");
+          if (!(sensor && wantSensors) && !(id.startsWith("binary_sensor.") && wantBinary)) continue;
+          if (entry?.hidden || entry?.entity_category || entityAreaId(hass, id) !== this._config.area) continue;
+          (sensor ? sensors : binarySensors).push(id);
+        }
+      }
+      let prepared = [];
+      try {
+        prepared = prepareIndicators(hass, this._config.area, this._config.indicators);
+      } catch (err) {
+        console.error("[overview-plus] area states could not be prepared – shown without them.", err);
+      }
+      this._cache = {
+        entities: hass.entities, devices: hass.devices, areas: hass.areas, config: this._config,
+        prepared, watch: watchedIndicators(prepared), sensors, binarySensors,
+      };
+      return this._cache;
+    }
+
+    /**
+     * Area states: the first active "tile" indicator tints the tile, "icon" indicators
+     * are chips in a row above the room icon (at most MAX_CHIPS, then "+N").
+     * @param {HTMLElement} card
+     */
+    _renderIndicators(card) {
+      const prepared = this._cached().prepared;
+      if (!prepared.length) return;
+      card.classList.add("has-indicators");
+      let active;
+      try {
+        active = evaluateIndicators(this._hass, prepared);
+      } catch (err) {
+        console.error("[overview-plus] area states could not be evaluated.", err);
+        return;
+      }
+      if (!active.length) return;
+      const hass = this._hass;
+      const name = (/** @type {any} */ i) =>
+        i.name || (i.key in INDICATOR_KEYS ? t(hass, `indicator_${i.key}`) : hass.states?.[i.entities[0]]?.attributes?.friendly_name || i.key);
+      const tile = active.find((i) => i.style === "tile");
+      if (tile) {
+        const color = indicatorColor(tile.color) || "var(--primary-color)";
+        card.style.setProperty("--indicator-color", color);
+        card.style.setProperty("--tile-color", color);
+        card.classList.add("tinted");
+      }
+      // For screen readers: all active states, also the one shown as tint
+      const label = document.createElement("span");
+      label.className = "sr-only";
+      label.textContent = active.map(name).join(", ");
+      card.appendChild(label);
+
+      const icons = active.filter((i) => i.style === "icon");
+      if (!icons.length) return;
+      const shown = icons.length > MAX_CHIPS ? icons.slice(0, MAX_CHIPS - 1) : icons;
+      const row = document.createElement("div");
+      row.className = "chips";
+      row.setAttribute("aria-hidden", "true");
+      // Chips show their name on hover; a click acts like a click on the tile
+      row.addEventListener("click", () => this._fireAction("tap"));
+      for (const indicator of shown) {
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.style.setProperty("--chip-color", indicatorColor(indicator.color) || "var(--primary-color)");
+        chip.title = name(indicator);
+        const icon = /** @type {any} */ (document.createElement("ha-icon"));
+        icon.icon = indicator.icon;
+        chip.appendChild(icon);
+        row.appendChild(chip);
+      }
+      if (icons.length > shown.length) {
+        const more = document.createElement("div");
+        more.className = "chip more";
+        more.textContent = `+${icons.length - shown.length}`;
+        more.title = icons.slice(shown.length).map(name).join(", ");
+        row.appendChild(more);
+      }
+      card.appendChild(row);
     }
   }
 

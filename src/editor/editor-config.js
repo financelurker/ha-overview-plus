@@ -24,9 +24,10 @@
  */
 
 import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
+import { INDICATOR_PRESETS } from "../area-indicators.js";
 
 /** Keys of the strategy config managed by the form. */
-const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", ...HOME_KEYS];
+const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", "area_indicators", ...HOME_KEYS];
 
 /** Selection criteria editable as fields (all accept one or more values). */
 export const MATCH_FIELDS = [
@@ -297,6 +298,55 @@ export function homeFromForm(home) {
   return out;
 }
 
+// ------------------------------------------------------------ area indicators
+
+const INDICATOR_FIELDS = ["style", "icon", "color"];
+
+/**
+ * Area indicators as form items: the configured ones in their order (enabled), then
+ * the other presets (disabled). Entries the form cannot edit are kept as they are.
+ * @param {any} indicators `area_indicators` of the config
+ * @returns {Record<string, any>[]}
+ */
+export function indicatorsToForm(indicators) {
+  /** @type {Record<string, any>[]} */
+  const items = [];
+  const seen = new Set();
+  for (const entry of Array.isArray(indicators) ? indicators : []) {
+    if (isPlainObject(entry) && entry.preset && INDICATOR_PRESETS[entry.preset] && !seen.has(entry.preset)) {
+      seen.add(entry.preset);
+      const { preset, style, icon, color, ...rest } = entry;
+      items.push({ preset, enabled: true, style, icon, color, ...(Object.keys(rest).length ? { extra: rest } : {}) });
+    } else {
+      // Own states, a preset used a second time, unknown presets (e.g. from a newer
+      // version) and anything else: kept unchanged
+      items.push({ custom: entry });
+    }
+  }
+  for (const preset of Object.keys(INDICATOR_PRESETS)) if (!seen.has(preset)) items.push({ preset, enabled: false });
+  return items;
+}
+
+/**
+ * @param {Record<string, any>[] | undefined} items
+ * @returns {any[] | undefined}
+ */
+export function indicatorsFromForm(items) {
+  const out = (Array.isArray(items) ? items : []).flatMap((item) => {
+    if (item.custom !== undefined) return [item.custom];
+    if (!item.enabled) return [];
+    const preset = INDICATOR_PRESETS[item.preset];
+    /** @type {Record<string, any>} */
+    const entry = { preset: item.preset, ...(isPlainObject(item.extra) ? item.extra : {}) };
+    for (const key of INDICATOR_FIELDS) {
+      const value = item[key];
+      if (value !== undefined && value !== "" && value !== /** @type {any} */ (preset)?.[key]) entry[key] = value;
+    }
+    return [entry];
+  });
+  return out.length ? out : undefined;
+}
+
 // ------------------------------------------------------------------ public
 
 /**
@@ -308,6 +358,7 @@ export function toForm(config) {
   return {
     load_home_settings: config.load_home_settings !== false,
     home: homeToForm(config),
+    indicators: indicatorsToForm(config.area_indicators),
     summary_pages: isPlainObject(config.summary_pages) ? { ...config.summary_pages } : {},
     strip_area_names: config.strip_area_names !== false,
     lazy_render: config.lazy_render !== false,
@@ -354,6 +405,8 @@ export function fromForm(form, original) {
     Object.entries(isPlainObject(form.summary_pages) ? form.summary_pages : {}).filter(([, v]) => typeof v === "string" ? v.trim() : v != null)
   );
   if (Object.keys(pages).length) config.summary_pages = pages;
+  const indicators = indicatorsFromForm(form.indicators);
+  if (indicators) config.area_indicators = indicators;
   // Own settings are kept while the built-in ones are used, so switching back restores them
   Object.assign(config, homeFromForm(form.home));
   if (form.strip_area_names === false) config.strip_area_names = false;
