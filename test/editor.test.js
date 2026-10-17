@@ -408,3 +408,19 @@ test("area states: switching a preset on writes area_indicators, styles can be c
   edit(formWith(rows[0], "i_style"), { i_style: "icon", i_color: "green" });
   assert.deepEqual(last().area_indicators, [{ preset: "occupied", style: "icon", color: "green" }]);
 });
+
+test("top-level parts are collapsible, collapsed at first, with a summary; the open state is remembered", () => {
+  window.localStorage.removeItem("overview-plus:editor-open");
+  const { editor } = setup({ ...TWO_AREAS, card_rules: [{ match: { domain: "light" }, card: false }], load_home_settings: false });
+  const tops = [...root(editor).querySelectorAll("details.top")];
+  assert.equal(tops.length, 3);
+  assert.ok(tops.every((d) => !d.open), "collapsed when opened the first time");
+  const summaries = tops.map((d) => d.querySelector(":scope > summary").textContent);
+  assert.match(summaries[0], /Overview page.*Own settings/);
+  assert.match(summaries[1], /2 areas with their own layout/);
+  assert.match(summaries[2], /1 card rule/);
+  tops[1].open = true;
+  tops[1].dispatchEvent(new Event("toggle"));
+  const again = setup({ type: "custom:overview-plus" });
+  assert.ok(root(again.editor).querySelector("details.top-areas").open, "remembered in this browser");
+});

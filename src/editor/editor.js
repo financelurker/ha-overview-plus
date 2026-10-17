@@ -42,7 +42,9 @@ const ICON = {
 // 12px padding inside collapsible blocks, 8px between the blocks of a list.
 const STYLE = `
   :host { display: block; }
-  .block + .block { margin-top: 24px; }
+  .top { display: block; }
+  .top + .top { margin-top: 12px; }
+  .top > .panel-body { padding: 16px 12px; }
   .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
   .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
   .heading + .subheading { margin-top: 16px; }
@@ -51,7 +53,7 @@ const STYLE = `
   .list:empty { display: none; }
   .list > .hint { margin: 0; }
   .areas, .rules { margin-bottom: 16px; }
-  .general, .areas-block { border-top: 1px solid var(--divider-color); padding-top: 24px; }
+
   .home > ha-form + ha-form { display: block; margin-top: 16px; }
   .home > .subheading { margin-top: 24px; }
   .home-items, .indicator-items { margin: 8px 0 16px; }
@@ -130,6 +132,29 @@ const newAreaEntry = (area) => ({
   sections: [],
 });
 
+/** Titles of the top-level parts. */
+const TOP_TITLES = { home: "editor_home", areas: "editor_areas", general: "editor_general" };
+const OPEN_KEY = "overview-plus:editor-open";
+
+/** Expanded top-level parts, remembered in this browser (best effort). @returns {Set<string>} */
+function loadOpenTop() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(OPEN_KEY) || "[]");
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** @param {Set<string>} open */
+function saveOpenTop(open) {
+  try {
+    window.localStorage.setItem(OPEN_KEY, JSON.stringify([...open]));
+  } catch {
+    // storage not available: the state is kept for this editor only
+  }
+}
+
 class OverviewPlusStrategyEditor extends HTMLElement {
   constructor() {
     super();
@@ -152,6 +177,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openSummaries = new Set();
     /** @type {Set<string>} presets of expanded area indicator blocks */
     this._openIndicators = new Set();
+    /** @type {Set<string>} expanded top-level parts (home, areas, general) */
+    this._openTop = loadOpenTop();
+    /** @type {Record<string, (header: string, secondary: string) => void>} */
+    this._topHeaders = {};
     /** @type {any} */
     this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
@@ -344,6 +373,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   // -------------------------------------------------------------- state & emit
 
   _emit() {
+    this._refreshTopHeaders();
     const config = fromForm(this._form, this._config);
     this._config = config;
     this._lastEmitted = JSON.stringify(config);
@@ -375,15 +405,21 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     style.textContent = STYLE;
     root.appendChild(style);
 
+    // Three collapsible parts; collapsed when the editor opens unless opened before
+    const homePanel = this._topPanel("home");
+    const areaPanel = this._topPanel("areas");
+    const generalPanel = this._topPanel("general");
+
     // ---- Overview page settings
     const homeBlock = document.createElement("div");
     homeBlock.className = "block home";
     this._parts.home = homeBlock;
+    homePanel.body.append(homeBlock);
 
     // ---- Area layouts: one block per customized area
-    const areaBlock = document.createElement("div");
-    areaBlock.className = "block areas-block";
-    areaBlock.append(this._heading("editor_areas"), this._hint("editor_areas_help"));
+    const areaBlock = areaPanel.body;
+    areaBlock.classList.add("areas-block");
+    areaBlock.append(this._hint("editor_areas_help"));
     this._parts.areas = document.createElement("div");
     this._parts.areas.className = "areas list";
     this._parts.addArea = document.createElement("div");
@@ -391,8 +427,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     areaBlock.append(this._parts.areas, this._parts.addArea);
 
     // ---- General: card rules and options for the whole dashboard
-    const generalBlock = document.createElement("div");
-    generalBlock.className = "block general";
+    const generalBlock = generalPanel.body;
+    generalBlock.classList.add("general");
     this._parts.rules = document.createElement("div");
     this._parts.rules.className = "rules list";
     const ruleActions = document.createElement("div");
@@ -404,7 +440,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._emit();
     }));
     generalBlock.append(
-      this._heading("editor_general"),
       this._subheading("editor_card_rules"),
       this._hint("editor_card_rules_help"),
       this._parts.rules,
@@ -425,11 +460,41 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       )
     );
 
-    root.append(homeBlock, areaBlock, generalBlock);
+    root.append(homePanel.root, areaPanel.root, generalPanel.root);
     this._built = true;
     this._renderHome();
     this._renderAreas();
     this._renderRules();
+    this._refreshTopHeaders();
+  }
+
+  /**
+   * One of the three top-level parts as a collapsible block.
+   * @param {"home" | "areas" | "general"} key
+   */
+  _topPanel(key) {
+    const panel = this._panel(this._t(TOP_TITLES[key]), "", this._openTop.has(key), (open) => {
+      if (open) this._openTop.add(key);
+      else this._openTop.delete(key);
+      saveOpenTop(this._openTop);
+    });
+    panel.root.classList.add("top", `top-${key}`);
+    this._topHeaders[key] = panel.setHeader;
+    return panel;
+  }
+
+  /** Short summaries in the headers of the top-level parts. */
+  _refreshTopHeaders() {
+    const n = (/** @type {number} */ count, /** @type {string} */ one, /** @type {string} */ many, /** @type {string} */ none) =>
+      count === 0 ? this._t(none) : this._t(count === 1 ? one : many, { n: String(count) });
+    const own = this._form.load_home_settings === false;
+    const states = (this._form.indicators || []).filter((/** @type {any} */ i) => i.enabled || i.custom).length;
+    this._topHeaders.home?.(this._t(TOP_TITLES.home), [
+      this._t(own ? "editor_h_source_own" : "editor_h_source_builtin"),
+      ...(states ? [n(states, "editor_one_state", "editor_n_states", "editor_n_states")] : []),
+    ].join(" · "));
+    this._topHeaders.areas?.(this._t(TOP_TITLES.areas), n(this._form.areas.length, "editor_one_area", "editor_n_areas", "editor_no_areas_short"));
+    this._topHeaders.general?.(this._t(TOP_TITLES.general), n(this._form.rules.length, "editor_one_rule", "editor_n_rules", "editor_no_rules_short"));
   }
 
   /** @param {string} key */
@@ -489,7 +554,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const home = this._form.home;
     const sources = ["builtin", "own"].map((value) => ({ value, label: this._t(`editor_h_source_${value}`) }));
     block.append(
-      this._heading("editor_home"),
       this._hint("editor_home_help"),
       this._haForm(
         [{ name: "h_source", required: true, selector: { select: { mode: "dropdown", options: sources } } }],
@@ -839,6 +903,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           this._form.areas.push(newAreaEntry(v.add_area));
           this._openAreas.add(v.add_area);
           this._renderAreas();
+          this._refreshTopHeaders();
           // nothing to emit yet: an area without sections and with default options has no override
         }
       )
