@@ -15,19 +15,21 @@ win.customElements.define("ha-expansion-panel", class extends win.HTMLElement {
 });
 const { EDITOR_TAG } = await import("../src/editor/editor.js");
 
-test("collapsing a nested panel does not change the remembered top-level part", () => {
-  win.localStorage.removeItem("overview-plus:editor-open");
+test("collapsing a nested panel does not collapse its top-level part", () => {
   const editor = document.createElement(EDITOR_TAG);
   document.body.appendChild(editor);
   editor.hass = makeHass();
-  editor.setConfig({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
-  const top = editor.shadowRoot.querySelector(".top-areas");
-  top.toggle(true);
-  assert.deepEqual(JSON.parse(win.localStorage.getItem("overview-plus:editor-open")), ["areas"]);
-  const area = top.querySelector(".area-panel");
+  const config = { type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } };
+  editor.setConfig(config);
+  const top = () => editor.shadowRoot.querySelector(".top-areas");
+  top().toggle(true);
+  const area = top().querySelector(".area-panel");
   area.toggle(true);
   area.toggle(false);
-  assert.deepEqual(JSON.parse(win.localStorage.getItem("overview-plus:editor-open")), ["areas"], "the area panel's events stay with it");
-  top.toggle(false);
-  assert.deepEqual(JSON.parse(win.localStorage.getItem("overview-plus:editor-open")), []);
+  // re-render (as after a change from Home Assistant): the top-level part is still open
+  editor.setConfig({ ...config, debug: true });
+  assert.equal(top().expanded, true, "the area panel's events stay with it");
+  top().toggle(false);
+  editor.setConfig({ ...config });
+  assert.equal(top().expanded, false);
 });

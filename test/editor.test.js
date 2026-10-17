@@ -409,8 +409,7 @@ test("area states: switching a preset on writes area_indicators, styles can be c
   assert.deepEqual(last().area_indicators, [{ preset: "occupied", style: "icon", color: "green" }]);
 });
 
-test("top-level parts are collapsible, collapsed at first, with a summary; the open state is remembered", () => {
-  window.localStorage.removeItem("overview-plus:editor-open");
+test("top-level parts are collapsible, collapsed whenever the editor opens, with a summary", () => {
   const { editor } = setup({ ...TWO_AREAS, card_rules: [{ match: { domain: "light" }, card: false }], load_home_settings: false });
   const tops = [...root(editor).querySelectorAll("details.top")];
   assert.equal(tops.length, 3);
@@ -421,9 +420,12 @@ test("top-level parts are collapsible, collapsed at first, with a summary; the o
   assert.match(summaries[2], /General1 card rule$/);
   tops[1].open = true;
   tops[1].dispatchEvent(new Event("toggle"));
+  // Home Assistant re-renders the same editor after a change: the part stays open
+  editor.setConfig({ ...TWO_AREAS, load_home_settings: false });
+  assert.ok(root(editor).querySelector("details.top-areas").open, "kept while the dialog is open");
+  // a new editor (the dialog opened again) starts collapsed
   const again = setup({ type: "custom:overview-plus" });
-  assert.ok(root(again.editor).querySelector("details.top-areas").open, "remembered in this browser");
-  window.localStorage.removeItem("overview-plus:editor-open");
+  assert.ok(!root(again.editor).querySelector("details.top-areas").open, "collapsed when opened again");
 });
 
 test("top-level summaries follow changes", () => {
@@ -437,22 +439,7 @@ test("top-level summaries follow changes", () => {
   assert.match(header("home"), /Own settings for this dashboard$/);
 });
 
-test("the editor works when the browser storage is not available", () => {
-  const original = Object.getOwnPropertyDescriptor(win, "localStorage");
-  Object.defineProperty(win, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
-  try {
-    const { editor } = setup({ type: "custom:overview-plus" });
-    const top = root(editor).querySelector("details.top-general");
-    assert.ok(top && !top.open);
-    top.open = true;
-    top.dispatchEvent(new Event("toggle"));
-  } finally {
-    if (original) Object.defineProperty(win, "localStorage", original);
-  }
-});
-
 test("summaries and area states are collapsible parts of the overview page, with a summary", () => {
-  window.localStorage.removeItem("overview-plus:editor-open");
   const { editor } = setup({
     type: "custom:overview-plus",
     load_home_settings: false,
@@ -472,8 +459,7 @@ test("summaries and area states are collapsible parts of the overview page, with
   assert.match(root(builtin.editor).querySelector("details.sub-indicators > summary").textContent, /None switched on$/);
 });
 
-test("overview page part summaries follow changes; open state is remembered", () => {
-  window.localStorage.removeItem("overview-plus:editor-open");
+test("overview page part summaries follow changes; open state kept while the dialog is open", () => {
   const { editor } = setup({ type: "custom:overview-plus", load_home_settings: false, shortcuts: [{ type: "custom", path: "/map" }] });
   const sub = (key) => root(editor).querySelector(`details.sub-${key}`);
   const text = (key) => sub(key).querySelector(":scope > summary").textContent;
@@ -493,8 +479,6 @@ test("overview page part summaries follow changes; open state is remembered", ()
 
   sub("summaries").open = true;
   sub("summaries").dispatchEvent(new Event("toggle"));
-  assert.ok(JSON.parse(window.localStorage.getItem("overview-plus:editor-open")).includes("home-summaries"));
   edit(formWith(root(editor), "h_source"), { h_source: "builtin" });
   assert.ok(sub("summaries").open, "still open after switching the source");
-  window.localStorage.removeItem("overview-plus:editor-open");
 });
