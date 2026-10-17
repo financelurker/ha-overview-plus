@@ -482,3 +482,14 @@ test("overview page part summaries follow changes; open state kept while the dia
   edit(formWith(root(editor), "h_source"), { h_source: "builtin" });
   assert.ok(sub("summaries").open, "still open after switching the source");
 });
+
+test("removing an area layout is a red action on the far side, away from Add section", () => {
+  const { editor } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const remove = buttons(panel, "Remove area layout")[0];
+  assert.ok(remove.classList.contains("danger"));
+  const row = remove.parentElement;
+  assert.ok(row.classList.contains("split"));
+  assert.equal(row.firstElementChild.textContent, "Add section");
+  assert.equal(row.lastElementChild, remove);
+});
