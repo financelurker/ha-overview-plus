@@ -45,7 +45,8 @@ const STYLE = `
   .top { display: block; }
   .top + .top { margin-top: 12px; }
   .top > .panel-body { padding: 16px 12px; }
-  .sub { margin-top: 16px; }
+  .sub { margin-top: 12px; }
+  .sub .home-actions { margin-top: -8px; }
   .sub > .panel-body > .hint { margin: 0 0 -12px; }
   .sub .home-items, .sub .indicator-items { margin: 0; }
   .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
@@ -507,12 +508,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._topHeaders.general?.(this._t(TOP_TITLES.general), n(this._form.rules.length, "editor_one_rule", "editor_n_rules", "editor_no_rules_short"));
 
     // Parts inside "Overview page"
-    const ownPages = Object.values(this._form.summary_pages || {}).filter(Boolean).length;
+    // Count what is saved: pages that are not blank, shortcuts with a path
+    const ownPages = Object.values(this._form.summary_pages || {}).filter((v) => (typeof v === "string" ? v.trim() : v != null)).length;
     const pagesText = ownPages ? this._t("editor_sum_pages", { n: String(ownPages) }) : this._t("editor_sum_default_pages");
     if (own) {
       const items = this._form.home?.items || [];
       const summaries = items.filter((/** @type {any} */ i) => i.type === "summary");
-      const shortcuts = items.filter((/** @type {any} */ i) => i.type !== "summary").length;
+      const shortcuts = items.filter((/** @type {any} */ i) => i.type !== "summary" && i.path).length;
       this._subHeaders.summaries?.([
         this._t("editor_sum_shown", { n: String(summaries.filter((/** @type {any} */ i) => !i.hidden).length), total: String(summaries.length) }),
         ...(shortcuts ? [this._t(shortcuts === 1 ? "editor_sum_one_shortcut" : "editor_sum_shortcuts", { n: String(shortcuts) })] : []),
@@ -651,6 +653,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {string} titleKey
    */
   _subPanel(key, titleKey) {
+    // "summaries" is shared by the own-settings and the built-in-settings variant on purpose:
+    // only one exists at a time, and switching the source keeps it open or closed
     const id = `home-${key}`;
     const panel = this._panel(this._t(titleKey), "", this._openTop.has(id), (open) => {
       if (open) this._openTop.add(id);

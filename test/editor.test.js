@@ -471,3 +471,30 @@ test("summaries and area states are collapsible parts of the overview page, with
   assert.match(root(builtin.editor).querySelector("details.sub-summaries > summary").textContent, /Home Assistant's pages$/);
   assert.match(root(builtin.editor).querySelector("details.sub-indicators > summary").textContent, /None switched on$/);
 });
+
+test("overview page part summaries follow changes; open state is remembered", () => {
+  window.localStorage.removeItem("overview-plus:editor-open");
+  const { editor } = setup({ type: "custom:overview-plus", load_home_settings: false, shortcuts: [{ type: "custom", path: "/map" }] });
+  const sub = (key) => root(editor).querySelector(`details.sub-${key}`);
+  const text = (key) => sub(key).querySelector(":scope > summary").textContent;
+  assert.match(text("summaries"), /7 of 7 shown · 1 shortcut$/);
+  // an empty new shortcut is not saved, so it is not counted
+  click(buttons(root(editor), "Add shortcut")[0]);
+  const toggle = root(editor).querySelector(".home-items input[type=checkbox]");
+  toggle.checked = false;
+  toggle.dispatchEvent(new Event("change"));
+  assert.match(text("summaries"), /6 of 7 shown · 1 shortcut$/);
+  edit(formWith(root(editor), "sp_light"), { sp_light: "/lights-plus/0" });
+  assert.match(text("summaries"), /· 1 with own page$/);
+  const state = root(editor).querySelector(".indicator-items input[type=checkbox]");
+  state.checked = true;
+  state.dispatchEvent(new Event("change"));
+  assert.match(text("indicators"), /1 switched on$/);
+
+  sub("summaries").open = true;
+  sub("summaries").dispatchEvent(new Event("toggle"));
+  assert.ok(JSON.parse(window.localStorage.getItem("overview-plus:editor-open")).includes("home-summaries"));
+  edit(formWith(root(editor), "h_source"), { h_source: "builtin" });
+  assert.ok(sub("summaries").open, "still open after switching the source");
+  window.localStorage.removeItem("overview-plus:editor-open");
+});
