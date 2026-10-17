@@ -77,6 +77,13 @@ const STYLE = `
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
   .row.split { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   button.fallback.danger { color: var(--error-color, #db4437); }
+  .row.end { justify-content: flex-end; }
+  .row.split > .moves { display: flex; gap: 4px; }
+  .delete-icon { color: var(--error-color, #db4437); margin-left: 12px; }
+  .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
+    border-radius: var(--ha-border-radius-md, 12px); background: color-mix(in srgb, var(--error-color, #db4437) 8%, transparent); }
+  .confirm .row { justify-content: flex-end; gap: 8px; }
+  .item-row:has(.confirm) { padding: 0; border: none; }
   details.panel { border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
   details.panel > summary { padding: 12px; cursor: pointer; }
   details.panel > summary .secondary { display: block; color: var(--secondary-text-color); font-size: 0.9em; }
@@ -276,6 +283,40 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       onClick();
     });
     return btn;
+  }
+
+  /**
+   * Inline confirmation: the content of `host` is replaced by a question with Cancel and
+   * a red confirm button until one of them is clicked (no dialog on top of HA's dialog).
+   * @param {HTMLElement} host
+   * @param {string} message
+   * @param {string} confirmLabel
+   * @param {() => void} onConfirm
+   */
+  _confirm(host, message, confirmLabel, onConfirm) {
+    const previous = Array.from(host.childNodes);
+    const box = document.createElement("div");
+    box.className = "confirm";
+    const text = document.createElement("span");
+    text.className = "confirm-text";
+    text.textContent = message;
+    const buttons = document.createElement("div");
+    buttons.className = "row";
+    buttons.append(
+      this._button(this._t("editor_cancel"), () => host.replaceChildren(...previous), "plain"),
+      this._button(confirmLabel, onConfirm, "filled", "danger")
+    );
+    box.append(text, buttons);
+    host.replaceChildren(box);
+  }
+
+  /**
+   * Red text button for removing the item a block belongs to, on the right of its row.
+   * @param {string} labelKey
+   * @param {() => void} onClick
+   */
+  _deleteButton(labelKey, onClick) {
+    return this._button(this._t(labelKey), onClick, "plain", "danger");
   }
 
   /**
@@ -593,6 +634,15 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       return;
     }
 
+    // Replacing the own settings with those of the built-in Overview: next to the choice
+    // of settings, red, and only after confirming
+    const copyRow = document.createElement("div");
+    copyRow.className = "row left copy-home";
+    copyRow.append(this._button(this._t("editor_copy_home"), () => {
+      this._confirm(copyRow, this._t("editor_copy_home_confirm"), this._t("editor_replace"), () => this._copyHome());
+    }, "plain", "danger"));
+    block.append(copyRow);
+
     block.append(
       this._haForm(
         [
@@ -626,8 +676,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._openShortcuts.add(home.items.length - 1);
         this._renderHomeItems(list);
         // nothing to emit yet: a shortcut without path is not saved
-      }),
-      this._button(this._t("editor_copy_home"), () => this._copyHome(), "plain")
+      })
     );
     summaries.body.append(actions);
     this._renderIndicatorBlock(block);
@@ -690,12 +739,16 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           this._t("editor_indicator_custom");
         if (own.entity && own.preset) label.textContent += ` · ${[].concat(own.entity).join(", ")}`;
         const icon = this._indicatorIcon({ .../** @type {any} */ (INDICATOR_PRESETS)[own.preset], ...own });
-        row.append(icon, label, ...move,
-          this._iconButton(ICON.delete, this._t("editor_delete_indicator"), () => {
+        // Own states can only be set up again in YAML: deleting asks first
+        const remove = this._iconButton(ICON.delete, this._t("editor_delete_indicator"), () => {
+          this._confirm(row, this._t("editor_delete_indicator_confirm", { name: label.textContent || "" }), this._t("editor_delete"), () => {
             items.splice(index, 1);
             rerender();
             this._emit();
-          }));
+          });
+        });
+        remove.classList.add("delete-icon");
+        row.append(icon, label, ...move, remove);
         list.append(row);
         return;
       }
@@ -870,15 +923,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const leading = /** @type {any} */ (document.createElement("ha-icon"));
       leading.icon = item.icon || "mdi:link";
       leading.className = "summary-icon";
-      const controls = [
-        ...moveButtons(index),
-        this._iconButton(ICON.delete, this._t("editor_delete_shortcut"), () => {
-          items.splice(index, 1);
-          this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-          rerender();
-          this._emit();
-        }),
-      ];
+      const controls = moveButtons(index);
       const panel = this._panel(header(), item.label ? item.path || "" : "", this._openShortcuts.has(index), (open) => {
         if (open) this._openShortcuts.add(index);
         else this._openShortcuts.delete(index);
@@ -904,7 +949,15 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           this._emit();
         }
       );
-      panel.body.append(form);
+      const actions = document.createElement("div");
+      actions.className = "row end";
+      actions.append(this._deleteButton("editor_delete_shortcut", () => {
+        items.splice(index, 1);
+        this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+        rerender();
+        this._emit();
+      }));
+      panel.body.append(form, actions);
       list.append(panel.root);
     });
   }
@@ -1083,20 +1136,23 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._emit();
       });
 
+      // Order on the left, deleting on the right in red
       const row = document.createElement("div");
-      row.className = "row icons";
-      row.append(
+      row.className = "row split";
+      const moves = document.createElement("div");
+      moves.className = "moves";
+      moves.append(
         this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(entry, index, -1, rerender), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1),
-        this._iconButton(ICON.delete, this._t("editor_delete_section"), () => {
-          entry.sections.splice(index, 1);
-          const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-          this._openSections.set(entry.area, next);
-          rerender();
-          refreshAreaHeader();
-          this._emit();
-        })
+        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1)
       );
+      row.append(moves, this._deleteButton("editor_delete_section", () => {
+        entry.sections.splice(index, 1);
+        const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+        this._openSections.set(entry.area, next);
+        rerender();
+        refreshAreaHeader();
+        this._emit();
+      }));
       panel.body.append(form, row);
       container.appendChild(panel.root);
     });
@@ -1170,17 +1226,19 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._emit();
       };
       const row = document.createElement("div");
-      row.className = "row icons";
-      row.append(
+      row.className = "row split";
+      const moves = document.createElement("div");
+      moves.className = "moves";
+      moves.append(
         this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(-1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1),
-        this._iconButton(ICON.delete, this._t("editor_delete_rule"), () => {
-          rules.splice(index, 1);
-          this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-          this._renderRules();
-          this._emit();
-        })
+        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1)
       );
+      row.append(moves, this._deleteButton("editor_delete_rule", () => {
+        rules.splice(index, 1);
+        this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+        this._renderRules();
+        this._emit();
+      }));
       panel.body.append(form, row);
       container.appendChild(panel.root);
     });
