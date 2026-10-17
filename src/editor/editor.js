@@ -75,6 +75,8 @@ const STYLE = `
   .panel-body > .row.icons { margin-top: -16px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
+  .row.split { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  button.fallback.danger { color: var(--error-color, #db4437); }
   details.panel { border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
   details.panel > summary { padding: 12px; cursor: pointer; }
   details.panel > summary .secondary { display: block; color: var(--secondary-text-color); font-size: 0.9em; }
@@ -259,13 +261,16 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {string} text
    * @param {() => void} onClick
    * @param {string} [appearance]
+   * @param {"danger"} [variant] "danger" for actions that remove something (red)
    */
-  _button(text, onClick, appearance = "filled") {
+  _button(text, onClick, appearance = "filled", variant) {
     const tag = customElements.get("ha-button") ? "ha-button" : "button";
     const btn = document.createElement(tag);
     btn.textContent = text;
-    if (tag === "ha-button") btn.setAttribute("appearance", appearance);
-    else btn.className = "fallback";
+    if (tag === "ha-button") {
+      btn.setAttribute("appearance", appearance);
+      if (variant) btn.setAttribute("variant", variant);
+    } else btn.className = variant ? `fallback ${variant}` : "fallback";
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       onClick();
@@ -967,8 +972,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     sections.className = "sections list";
     const renderSections = () => this._renderSections(entry, sections, refreshHeader);
 
+    // Adding on the left, removing the whole layout far away on the right and in red
     const actions = document.createElement("div");
-    actions.className = "row left";
+    actions.className = "row split";
     actions.append(
       this._button(this._t("editor_add_section"), () => {
         entry.sections.push({ title: "", layout: "tiles", m_label: [] });
@@ -983,7 +989,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._openSections.delete(entry.area);
         this._renderAreas();
         this._emit();
-      }, "plain")
+      }, "plain", "danger")
     );
 
     panel.body.append(options, sections, actions);
