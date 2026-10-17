@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
-import { activeIndicators, resolveIndicator, watchedIndicatorEntities } from "../src/area-indicators.js";
+import { activeIndicators, prepareIndicators, resolveIndicator, watchedIndicators } from "../src/area-indicators.js";
 import { indicatorsFromForm, indicatorsToForm } from "../src/editor/editor-config.js";
 
 const st = (entity_id, state, attributes = {}) => ({ entity_id, state, attributes });
@@ -51,7 +51,7 @@ test("any matching entity makes the indicator active; an explicit entity replace
   assert.deepEqual(activeIndicators(h, "room", [{ preset: "occupied" }]), []);
   const explicit = [{ preset: "occupied", entity: "binary_sensor.room_motion" }];
   assert.deepEqual(activeIndicators(h, "room", explicit)[0].entities, ["binary_sensor.room_motion"]);
-  assert.deepEqual(watchedIndicatorEntities(h, "room", explicit), ["binary_sensor.room_motion"]);
+  assert.deepEqual(watchedIndicators(prepareIndicators(h, "room", explicit)).entities, ["binary_sensor.room_motion"]);
 });
 
 test("own indicators: entity + state, overrides of presets", () => {
@@ -64,6 +64,40 @@ test("own indicators: entity + state, overrides of presets", () => {
   assert.equal(resolveIndicator({ preset: "nope" }), undefined);
 });
 
+test("normalized config: unquoted on/off, states and device classes as text, bad entries", () => {
+  const h = hass();
+  h.states["switch.plug"] = st("switch.plug", "on");
+  h.entities["switch.plug"] = { area_id: "room" };
+  assert.equal(activeIndicators(h, "room", [{ name: "Plug", entity: "switch.plug", state: true }]).length, 1, "YAML on = true");
+  assert.equal(activeIndicators(h, "room", [{ name: "Plug", entity: "switch.plug", states: "on" }]).length, 1, "states as text");
+  assert.equal(activeIndicators(h, "room", [{ name: "Occ", domain: "binary_sensor", device_classes: "occupancy" }]).length, 1);
+  assert.equal(activeIndicators(h, "room", [{ name: "Part", domain: "binary_sensor", device_classes: "occ" }]).length, 0, "no substring match");
+  assert.deepEqual(activeIndicators(h, "room", [null, "x", { preset: "nope" }, 42]), [], "bad entries are skipped");
+});
+
+test("attribute indicators and states that arrive after the registry was read", () => {
+  const h = hass();
+  h.states["climate.room_trv"].attributes.preset_mode = "eco";
+  const boost = [{ name: "Boost", domain: "climate", attribute: "preset_mode", state: "boost" }];
+  const prepared = prepareIndicators(h, "room", boost);
+  assert.deepEqual(watchedIndicators(prepared).attributes, ["preset_mode"]);
+  assert.equal(activeIndicators(h, "room", boost).length, 0);
+  h.states["climate.room_trv"].attributes.preset_mode = "boost";
+  assert.equal(activeIndicators(h, "room", boost).length, 1);
+  // registry entry without state yet: candidate anyway, the device class is checked later
+  h.entities["binary_sensor.room_radar"] = { area_id: "room" };
+  const occupied = prepareIndicators(h, "room", [{ preset: "occupied" }]);
+  assert.ok(occupied[0].candidates.includes("binary_sensor.room_radar"));
+});
+
+test("an area found through the parent device", () => {
+  const h = hass();
+  h.devices.child = { id: "child", parent_device_id: "trv" };
+  h.states["humidifier.child"] = st("humidifier.child", "on", { action: "drying" });
+  h.entities["humidifier.child"] = { device_id: "child" };
+  assert.deepEqual(activeIndicators(h, "room", [{ preset: "drying" }])[0].entities, ["humidifier.child"]);
+});
+
 test("editor form: enabled presets in order, the others disabled; own ones kept", () => {
   const config = [{ preset: "heating", color: "red" }, { name: "Washer", entity: "sensor.washer", state: "running" }, { preset: "occupied" }];
   const items = indicatorsToForm(config);
@@ -74,6 +108,11 @@ test("editor form: enabled presets in order, the others disabled; own ones kept"
   items.find((i) => i.preset === "occupied").style = "tile"; // same as the preset: not written
   assert.deepEqual(indicatorsFromForm(items).at(-1), { preset: "lights_on" });
   assert.equal(indicatorsFromForm(indicatorsToForm(undefined)), undefined, "nothing enabled: no key");
+});
+
+test("editor form keeps what it cannot edit: unknown presets, duplicates, other values", () => {
+  const config = [{ preset: "future_preset" }, { preset: "occupied", entity: "a" }, { preset: "occupied", entity: "b", name: "Guest" }, "lights_on"];
+  assert.deepEqual(indicatorsFromForm(indicatorsToForm(config)), config);
 });
 
 // ------------------------------------------------------------------ tile
@@ -123,4 +162,48 @@ test("tile without entities shows the area's temperature like the area card", ()
   h.formatEntityState = (s, v) => `${v ?? s.state} ${s.attributes.unit_of_measurement}`;
   const root = tile([{ preset: "occupied" }], h);
   assert.equal(root.querySelector("ha-tile-info").secondary, "21.5 °C");
+});
+
+test("tile re-renders when a compared attribute or a late state changes", () => {
+  const h = hass();
+  h.states["climate.room_trv"].attributes.preset_mode = "eco";
+  const el = document.createElement("overview-plus-area-tile");
+  el.setConfig({ type: "custom:overview-plus-area-tile", area: "room", vertical: true,
+    indicators: [{ name: "Boost", domain: "climate", attribute: "preset_mode", state: "boost" }, { preset: "occupied" }] });
+  h.states["binary_sensor.room_occupied"] = st("binary_sensor.room_occupied", "off", { device_class: "occupancy" });
+  el.hass = h;
+  document.body.appendChild(el);
+  assert.equal(el.shadowRoot.querySelector(".chip"), null);
+  const next = { ...h, states: { ...h.states, "climate.room_trv": st("climate.room_trv", "heat", { hvac_action: "heating", preset_mode: "boost" }) } };
+  el.hass = next;
+  assert.equal(el.shadowRoot.querySelectorAll(".chip").length, 1, "attribute change re-renders");
+  assert.equal(el.shadowRoot.querySelector(".chip").title, "Boost");
+  // a sensor whose state (with its device class) arrives only now
+  const later = { ...next, entities: next.entities, states: { ...next.states, "binary_sensor.room_occupied": st("binary_sensor.room_occupied", "on", { device_class: "occupancy" }) } };
+  el.hass = later;
+  assert.ok(el.shadowRoot.querySelector("ha-card").classList.contains("tinted"));
+});
+
+test("tile: own state without name is called by the entity; screen reader text; space kept", () => {
+  const h = hass();
+  h.states["sensor.washer"].attributes.friendly_name = "Washing machine";
+  h.entities["sensor.washer"] = { area_id: "room" };
+  const root = tile([{ entity: "sensor.washer", state: "running" }, { preset: "lights_on" }], h);
+  assert.equal(root.querySelector(".chip").title, "Washing machine");
+  assert.equal(root.querySelector(".sr-only").textContent, "Washing machine");
+  const quiet = tile([{ preset: "lights_on" }]);
+  assert.ok(quiet.querySelector("ha-card").classList.contains("has-indicators"), "same layout with or without active states");
+});
+
+test("tile: average of several sensors of a class, sensor_classes override", () => {
+  const h = hass();
+  h.formatEntityState = (s, v) => `${v ?? s.state} ${s.attributes.unit_of_measurement}`;
+  h.states["sensor.a"] = st("sensor.a", "20", { unit_of_measurement: "°C", device_class: "temperature" });
+  h.states["sensor.b"] = st("sensor.b", "23", { unit_of_measurement: "°C", device_class: "temperature" });
+  h.states["sensor.hum"] = st("sensor.hum", "40", { unit_of_measurement: "%", device_class: "humidity" });
+  Object.assign(h.entities, { "sensor.a": { area_id: "room" }, "sensor.b": { area_id: "room" }, "sensor.hum": { area_id: "room" } });
+  const el = document.createElement("overview-plus-area-tile");
+  el.setConfig({ type: "custom:overview-plus-area-tile", area: "room", sensor_classes: ["temperature", "humidity"] });
+  el.hass = h;
+  assert.equal(el.shadowRoot.querySelector("ha-tile-info").secondary, "21.5 °C · 40 %");
 });

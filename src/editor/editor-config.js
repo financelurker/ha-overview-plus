@@ -304,7 +304,7 @@ const INDICATOR_FIELDS = ["style", "icon", "color"];
 
 /**
  * Area indicators as form items: the configured ones in their order (enabled), then
- * the other presets (disabled). Indicators without preset are kept as they are.
+ * the other presets (disabled). Entries the form cannot edit are kept as they are.
  * @param {any} indicators `area_indicators` of the config
  * @returns {Record<string, any>[]}
  */
@@ -317,7 +317,9 @@ export function indicatorsToForm(indicators) {
       seen.add(entry.preset);
       const { preset, style, icon, color, ...rest } = entry;
       items.push({ preset, enabled: true, style, icon, color, ...(Object.keys(rest).length ? { extra: rest } : {}) });
-    } else if (isPlainObject(entry) && !entry.preset) {
+    } else {
+      // Own states, a preset used a second time, unknown presets (e.g. from a newer
+      // version) and anything else: kept unchanged
       items.push({ custom: entry });
     }
   }
@@ -331,7 +333,7 @@ export function indicatorsToForm(indicators) {
  */
 export function indicatorsFromForm(items) {
   const out = (Array.isArray(items) ? items : []).flatMap((item) => {
-    if (item.custom) return [item.custom];
+    if (item.custom !== undefined) return [item.custom];
     if (!item.enabled) return [];
     const preset = INDICATOR_PRESETS[item.preset];
     /** @type {Record<string, any>} */

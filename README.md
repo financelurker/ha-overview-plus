@@ -23,7 +23,7 @@ Taken from the Home Assistant demo integration. The summaries row of the overvie
 are tinted, chips show heating, cooling, lights and an open window. The *Server* tile shows two
 selected sensors (CPU and memory) instead of temperature.
 
-![Overview page](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview.png?v=44bc9e146b)
+![Overview page](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview.png?v=ac1ca4c8be)
 
 **Area with its own sections:** *Host* and *Virtual machines* are selected by label, and the area
 name is removed from the card names ("Server CPU load" → "CPU load"). Card rules set the CPU and
@@ -53,8 +53,8 @@ button card that opens a tile with cover controls.
 <td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=c3998eda4a" alt="Editor: pages of the summaries"></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=e04b80f382" alt="Editor: area states"></td>
-<td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=306d9162e0" alt="Overview page on a phone"></td>
+<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=4fa1ff57fa" alt="Editor: area states"></td>
+<td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=b927038a82" alt="Overview page on a phone"></td>
 </tr>
 </table>
 
@@ -171,9 +171,15 @@ strategy:
   template sensor `device_class: occupancy`, or set it with `entity:`.
 - `entity:` (one or a list) uses only these entities instead of searching the area.
 - Own states: `{ name, entity, state, icon, color, style }`, e.g. a washing machine that is
-  `running`. `attribute:` compares an attribute instead of the state.
-- The first active tile state tints the tile; at most four chips are shown, then `+N`.
-- With area states, all areas use Overview Plus' own area tile (it looks like the compact area card).
+  `running`. `state` is `on` if not set (also several: `state: [heat, boost]`); `attribute:` compares
+  an attribute instead of the state. Instead of `entity:`, `domain:` (and `device_classes:`) searches
+  the area like a preset. Own states are set in YAML; the editor lists them so they can be moved or
+  deleted.
+- The first active tile state tints the tile. Up to four chips are shown; with more states, three
+  chips and a `+N` chip (hover it for the rest).
+- With area states, the areas use Overview Plus' own area tile (it looks like the compact area card
+  and shows the same temperature). An area whose tile is set to `display_type: picture` / `camera` or
+  has `features` keeps the area card – without area states.
 
 ### Pages of the summaries
 

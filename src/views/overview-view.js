@@ -153,7 +153,10 @@ function areaCard(hass, areaId, tile, indicators) {
   const own = tile && typeof tile === "object" ? tile : {};
   const hasIndicators = Array.isArray(indicators) && indicators.length > 0;
   const custom = (Array.isArray(own.entities) && own.entities.length) || (Array.isArray(own.alert_entities) && own.alert_entities.length);
-  if (custom || hasIndicators) {
+  // An area card set up as picture / camera or with features stays the area card –
+  // without area states, since only the Overview Plus tile can show them
+  const areaCardOnly = (own.display_type && own.display_type !== "compact") || own.features !== undefined;
+  if (custom || (hasIndicators && !areaCardOnly)) {
     // The area card cannot show these: the Overview Plus area tile looks the same and can
     const { display_type: _d, sensor_classes: _s, ...base } = card;
     /** @type {Record<string, any>} */

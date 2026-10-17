@@ -24,6 +24,8 @@
  *        "icon" shows a colored icon on the tile (several at once).
  */
 
+import { deviceAreaId } from "./registry.js";
+
 /**
  * @typedef {Object} IndicatorPreset
  * @property {string} icon
@@ -80,50 +82,77 @@ export function indicatorColor(color) {
  * @param {any} hass
  * @param {string} entityId
  */
-function areaOf(hass, entityId) {
+export function entityAreaId(hass, entityId) {
   const entry = hass.entities?.[entityId];
   if (!entry) return undefined;
   if (entry.area_id) return entry.area_id;
   const device = entry.device_id ? hass.devices?.[entry.device_id] : undefined;
-  if (device?.area_id) return device.area_id;
-  return device?.parent_device_id ? hass.devices?.[device.parent_device_id]?.area_id : undefined;
+  return device ? deviceAreaId(device, hass.devices || {}) : undefined;
+}
+
+/** YAML 1.1 reads an unquoted on / off as a boolean. @param {any} v */
+const stateText = (v) => (v === true ? "on" : v === false ? "off" : String(v));
+
+const warned = new Set();
+/** @param {string} preset */
+function warnUnknown(preset) {
+  if (warned.has(preset)) return;
+  warned.add(preset);
+  console.warn(`[overview-plus] area_indicators: unknown preset "${preset}" – ignored.`);
 }
 
 /**
- * Indicator config with its preset filled in.
+ * Indicator config with its preset filled in; values normalized.
  * @param {any} config
  */
 export function resolveIndicator(config) {
-  const preset = config?.preset ? INDICATOR_PRESETS[config.preset] : undefined;
-  if (config?.preset && !preset) return undefined;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return undefined;
+  const preset = config.preset ? INDICATOR_PRESETS[config.preset] : undefined;
+  if (config.preset && !preset) {
+    warnUnknown(String(config.preset));
+    return undefined;
+  }
   const merged = { ...(preset || {}), ...config };
-  if (config?.state !== undefined) merged.states = list(config.state);
-  if (!merged.states?.length) merged.states = ["on"];
+  const states = config.state !== undefined ? list(config.state) : list(merged.states);
+  merged.states = (states.length ? states : ["on"]).map(stateText);
+  merged.device_classes = list(merged.device_classes).map(String);
+  merged.entity = list(merged.entity).filter((e) => typeof e === "string");
   merged.style = merged.style === "tile" ? "tile" : "icon";
   merged.icon = merged.icon || "mdi:circle-medium";
-  merged.key = config?.preset || config?.name || list(config?.entity)[0] || "custom";
+  merged.key = config.preset || config.name || merged.entity[0] || "custom";
   return merged;
 }
 
 /**
- * Entities an indicator watches in an area.
+ * The indicators of an area, prepared for evaluation: each resolved indicator with
+ * its candidate entities (explicit ones, or the entities of its domain in the area).
+ * Depends on the registries only – cache it until hass.entities / devices change.
+ * Device classes are checked when evaluating, since states may arrive later.
  * @param {any} hass
  * @param {string} areaId
- * @param {any} indicator resolved indicator
- * @returns {string[]}
+ * @param {any[]} configs
+ * @returns {{ indicator: any, config: any, candidates: string[] }[]}
  */
-export function indicatorEntities(hass, areaId, indicator) {
-  const explicit = list(indicator.entity);
-  if (explicit.length) return explicit;
-  if (!indicator.domain) return [];
-  return Object.keys(hass.entities || {}).filter((id) => {
-    if (!id.startsWith(`${indicator.domain}.`)) return false;
-    const entry = hass.entities[id];
-    if (entry.hidden || entry.entity_category) return false;
-    if (areaOf(hass, id) !== areaId) return false;
-    if (indicator.device_classes?.length) return indicator.device_classes.includes(hass.states?.[id]?.attributes?.device_class);
-    return true;
-  });
+export function prepareIndicators(hass, areaId, configs) {
+  const resolved = list(configs).map((config) => ({ config, indicator: resolveIndicator(config) })).filter((r) => r.indicator);
+  if (!resolved.length) return [];
+  // One pass over the registry for all domains the area search needs
+  const domains = new Set(resolved.filter((r) => !r.indicator.entity.length && r.indicator.domain).map((r) => r.indicator.domain));
+  /** @type {Record<string, string[]>} */
+  const byDomain = {};
+  if (domains.size) {
+    for (const [id, entry] of Object.entries(hass.entities || {})) {
+      const domain = id.slice(0, id.indexOf("."));
+      if (!domains.has(domain) || entry?.hidden || entry?.entity_category) continue;
+      if (entityAreaId(hass, id) !== areaId) continue;
+      (byDomain[domain] ||= []).push(id);
+    }
+  }
+  return resolved.map(({ config, indicator }) => ({
+    config,
+    indicator,
+    candidates: indicator.entity.length ? indicator.entity : indicator.domain ? byDomain[indicator.domain] || [] : [],
+  }));
 }
 
 /**
@@ -133,8 +162,30 @@ export function indicatorEntities(hass, areaId, indicator) {
  */
 function isActive(indicator, stateObj) {
   if (!stateObj) return false;
+  if (!indicator.entity.length && indicator.device_classes.length && !indicator.device_classes.includes(stateObj.attributes?.device_class)) {
+    return false;
+  }
   const value = indicator.attribute ? stateObj.attributes?.[indicator.attribute] : stateObj.state;
-  return indicator.states.map(String).includes(String(value));
+  return value !== undefined && value !== null && indicator.states.includes(stateText(value));
+}
+
+/**
+ * Active indicators, in config order.
+ * @param {any} hass
+ * @param {{ indicator: any, config: any, candidates: string[] }[]} prepared from prepareIndicators
+ * @returns {{ key: string, name?: string, icon: string, color?: string, style: "tile" | "icon", entities: string[] }[]}
+ */
+export function evaluateIndicators(hass, prepared) {
+  const result = [];
+  for (const { indicator, config, candidates } of prepared) {
+    const entities = candidates.filter((id) => isActive(indicator, hass.states?.[id]));
+    if (!entities.length) continue;
+    // Icon by the kind of device, e.g. a TV or a speaker playing (unless an icon is configured)
+    const deviceClass = hass.states?.[entities[0]]?.attributes?.device_class;
+    const icon = (!config.icon && indicator.icons?.[deviceClass]) || indicator.icon;
+    result.push({ key: indicator.key, name: indicator.name, icon, color: indicator.color, style: indicator.style, entities });
+  }
+  return result;
 }
 
 /**
@@ -142,33 +193,19 @@ function isActive(indicator, stateObj) {
  * @param {any} hass
  * @param {string} areaId
  * @param {any[]} configs
- * @returns {{ key: string, name?: string, icon: string, color?: string, style: "tile" | "icon", entities: string[] }[]}
  */
 export function activeIndicators(hass, areaId, configs) {
-  const result = [];
-  for (const config of list(configs)) {
-    const indicator = resolveIndicator(config);
-    if (!indicator) continue;
-    const entities = indicatorEntities(hass, areaId, indicator).filter((id) => isActive(indicator, hass.states?.[id]));
-    if (entities.length) {
-      // Icon by the kind of device, e.g. a TV or a speaker playing (unless an icon is configured)
-      const deviceClass = hass.states?.[entities[0]]?.attributes?.device_class;
-      const icon = (!config.icon && indicator.icons?.[deviceClass]) || indicator.icon;
-      result.push({ key: indicator.key, name: indicator.name, icon, color: indicator.color, style: indicator.style, entities });
-    }
-  }
-  return result;
+  return evaluateIndicators(hass, prepareIndicators(hass, areaId, configs));
 }
 
 /**
- * All entities whose state matters for the indicators of an area (for re-rendering).
- * @param {any} hass
- * @param {string} areaId
- * @param {any[]} configs
+ * What a tile has to watch for re-rendering: candidate entities and the attributes
+ * the indicators compare.
+ * @param {{ indicator: any, candidates: string[] }[]} prepared
  */
-export function watchedIndicatorEntities(hass, areaId, configs) {
-  return list(configs).flatMap((config) => {
-    const indicator = resolveIndicator(config);
-    return indicator ? indicatorEntities(hass, areaId, indicator) : [];
-  });
+export function watchedIndicators(prepared) {
+  return {
+    entities: [...new Set(prepared.flatMap((p) => p.candidates))],
+    attributes: [...new Set(prepared.map((p) => p.indicator.attribute).filter(Boolean))],
+  };
 }

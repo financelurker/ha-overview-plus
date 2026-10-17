@@ -24,13 +24,13 @@ import { fromForm, homeToForm, toForm } from "./editor-config.js";
 import { loadHomeSettings, SUMMARY_KEY_ICONS } from "../home-settings.js";
 import { defaultSummaryPage, SUMMARY_PAGE_KEYS } from "../summary-pages.js";
 import { indicatorColor, INDICATOR_PRESETS } from "../area-indicators.js";
-
-/** Object without undefined / empty values. @param {Record<string, any>} o */
-const dropUnset = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== ""));
 import { areaTileClassOptions, collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
 export const EDITOR_TAG = "overview-plus-strategy-editor";
+
+/** Object without undefined / empty values. @param {Record<string, any>} o */
+const dropUnset = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== ""));
 
 const ICON = {
   up: "M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z",
@@ -583,13 +583,17 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
         this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
       ];
-      if (item.custom) {
+      if (item.custom !== undefined) {
         const row = document.createElement("div");
         row.className = "item-row";
         const label = document.createElement("span");
         label.className = "label";
-        label.textContent = item.custom.name || [].concat(item.custom.entity || []).join(", ") || this._t("editor_indicator_custom");
-        row.append(this._indicatorIcon(item.custom), label, ...move,
+        const own = item.custom && typeof item.custom === "object" ? item.custom : {};
+        label.textContent = own.name || (own.preset ? this._t(`indicator_${own.preset}`) : "") || [].concat(own.entity || []).join(", ") ||
+          this._t("editor_indicator_custom");
+        if (own.entity && own.preset) label.textContent += ` · ${[].concat(own.entity).join(", ")}`;
+        const icon = this._indicatorIcon({ .../** @type {any} */ (INDICATOR_PRESETS)[own.preset], ...own });
+        row.append(icon, label, ...move,
           this._iconButton(ICON.delete, this._t("editor_delete_indicator"), () => {
             items.splice(index, 1);
             rerender();
