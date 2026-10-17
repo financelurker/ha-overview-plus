@@ -408,3 +408,45 @@ test("area states: switching a preset on writes area_indicators, styles can be c
   edit(formWith(rows[0], "i_style"), { i_style: "icon", i_color: "green" });
   assert.deepEqual(last().area_indicators, [{ preset: "occupied", style: "icon", color: "green" }]);
 });
+
+test("top-level parts are collapsible, collapsed at first, with a summary; the open state is remembered", () => {
+  window.localStorage.removeItem("overview-plus:editor-open");
+  const { editor } = setup({ ...TWO_AREAS, card_rules: [{ match: { domain: "light" }, card: false }], load_home_settings: false });
+  const tops = [...root(editor).querySelectorAll("details.top")];
+  assert.equal(tops.length, 3);
+  assert.ok(tops.every((d) => !d.open), "collapsed when opened the first time");
+  const summaries = tops.map((d) => d.querySelector(":scope > summary").textContent);
+  assert.match(summaries[0], /Overview page.*Own settings/);
+  assert.match(summaries[1], /2 areas with their own layout/);
+  assert.match(summaries[2], /General1 card rule$/);
+  tops[1].open = true;
+  tops[1].dispatchEvent(new Event("toggle"));
+  const again = setup({ type: "custom:overview-plus" });
+  assert.ok(root(again.editor).querySelector("details.top-areas").open, "remembered in this browser");
+  window.localStorage.removeItem("overview-plus:editor-open");
+});
+
+test("top-level summaries follow changes", () => {
+  const { editor } = setup({ type: "custom:overview-plus" });
+  const header = (key) => root(editor).querySelector(`details.top-${key} > summary`).textContent;
+  assert.match(header("general"), /No card rules$/);
+  click(buttons(root(editor), "Add rule")[0]);
+  assert.match(header("general"), /General1 card rule$/);
+  assert.match(header("areas"), /All areas use the default layout$/);
+  edit(formWith(root(editor), "h_source"), { h_source: "own" });
+  assert.match(header("home"), /Own settings for this dashboard$/);
+});
+
+test("the editor works when the browser storage is not available", () => {
+  const original = Object.getOwnPropertyDescriptor(win, "localStorage");
+  Object.defineProperty(win, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
+  try {
+    const { editor } = setup({ type: "custom:overview-plus" });
+    const top = root(editor).querySelector("details.top-general");
+    assert.ok(top && !top.open);
+    top.open = true;
+    top.dispatchEvent(new Event("toggle"));
+  } finally {
+    if (original) Object.defineProperty(win, "localStorage", original);
+  }
+});
