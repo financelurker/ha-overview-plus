@@ -77,7 +77,6 @@ const STYLE = `
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
   .row.split { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   button.fallback.danger { color: var(--error-color, #db4437); }
-  .row.end { justify-content: flex-end; }
   .row.split > .moves { display: flex; gap: 4px; }
   .delete-icon { color: var(--error-color, #db4437); margin-left: 12px; }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
@@ -173,6 +172,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
      * @type {Set<string>}
      */
     this._openTop = new Set();
+    /** Ids for the texts of inline confirmations */
+    this._confirmCount = 0;
     /** @type {Record<string, (header: string, secondary: string) => void>} */
     this._topHeaders = {};
     /** @type {Record<string, (secondary: string) => void>} */
@@ -295,19 +296,38 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    */
   _confirm(host, message, confirmLabel, onConfirm) {
     const previous = Array.from(host.childNodes);
+    // Focus goes back to the button that asked, if Cancel is chosen
+    const trigger = /** @type {HTMLElement | null} */ (/** @type {Document | ShadowRoot} */ (host.getRootNode()).activeElement ?? null);
     const box = document.createElement("div");
     box.className = "confirm";
+    box.setAttribute("role", "alertdialog");
     const text = document.createElement("span");
     text.className = "confirm-text";
+    text.id = `confirm-${++this._confirmCount}`;
     text.textContent = message;
+    box.setAttribute("aria-describedby", text.id);
+    const restore = () => host.replaceChildren(...previous);
+    let done = false;
     const buttons = document.createElement("div");
     buttons.className = "row";
+    const cancel = this._button(this._t("editor_cancel"), () => {
+      restore();
+      if (trigger && host.contains(trigger)) trigger.focus();
+    }, "plain");
     buttons.append(
-      this._button(this._t("editor_cancel"), () => host.replaceChildren(...previous), "plain"),
-      this._button(confirmLabel, onConfirm, "filled", "danger")
+      cancel,
+      // Restore first, so a second click (e.g. while settings are loading) cannot run it twice
+      this._button(confirmLabel, () => {
+        if (done) return;
+        done = true;
+        restore();
+        onConfirm();
+      }, "filled", "danger")
     );
     box.append(text, buttons);
     host.replaceChildren(box);
+    // ha-button renders its inner button asynchronously
+    requestAnimationFrame(() => cancel.focus());
   }
 
   /**
@@ -950,7 +970,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         }
       );
       const actions = document.createElement("div");
-      actions.className = "row end";
+      actions.className = "row";
       actions.append(this._deleteButton("editor_delete_shortcut", () => {
         items.splice(index, 1);
         this._openShortcuts = new Set([...this._openShortcuts].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));

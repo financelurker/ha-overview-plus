@@ -565,3 +565,27 @@ test("own area states: red delete with distance, only after confirming", () => {
   click(buttons(row, "Delete")[0]);
   assert.deepEqual(last().area_indicators, [{ preset: "occupied" }]);
 });
+
+test("confirmations: the action runs once, after a cancel the right item is deleted", async () => {
+  const states = [{ name: "Washer", entity: "sensor.washer" }, { name: "Dryer", entity: "sensor.dryer" }];
+  const { editor, last } = setup({ type: "custom:overview-plus", area_indicators: states });
+  const scope = root(editor).querySelector(".indicator-items");
+  const row = buttons(scope, "Delete state")[1].parentElement;
+  click(buttons(row, "Delete state")[0]);
+  assert.equal(row.querySelector(".confirm").getAttribute("role"), "alertdialog");
+  click(buttons(row, "Cancel")[0]);
+  click(buttons(row, "Delete state")[0]);
+  click(buttons(row, "Delete")[0]);
+  assert.deepEqual(last().area_indicators, [states[0]]);
+
+  const own = setup({ type: "custom:overview-plus", load_home_settings: false });
+  let calls = 0;
+  own.editor.hass = { ...own.editor.hass, callWS: async () => { calls++; return { value: {} }; } };
+  const copyRow = root(own.editor).querySelector(".copy-home");
+  click(buttons(copyRow, "Copy from the built-in Overview")[0]);
+  const replace = buttons(copyRow, "Replace")[0];
+  click(replace);
+  click(replace);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(calls, 2, "one copy (home + security), not two");
+});
