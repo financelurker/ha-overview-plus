@@ -48,15 +48,15 @@ parts, each with a short summary of what is set.
 
 <table>
 <tr>
-<td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=6b005b3557" alt="Editor: overview page settings"></td>
+<td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=2f50c95543" alt="Editor: overview page settings"></td>
 <td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=25b0602faa" alt="Editor: area layout with sections"></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=a48dda084d" alt="Editor: card rule with popup"></td>
-<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=8be433563d" alt="Editor: pages of the summaries"></td>
+<td width="50%" valign="top"><b>Summaries</b> – order, show or hide, and the page each one leads to: Home Assistant's own or a dashboard of yours<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=3549513610" alt="Editor: pages of the summaries"></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=c73ec15d4b" alt="Editor: area states"></td>
+<td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=107427816f" alt="Editor: area states"></td>
 <td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=b927038a82" alt="Overview page on a phone"></td>
 </tr>
 </table>
@@ -91,7 +91,8 @@ To configure it, open the dashboard → ✏️ (edit). The visual editor has thr
 open ones are remembered in the browser):
 
 - **Overview page:** welcome message, favorites, suggested entities, summaries and shortcuts, alert
-  entities – the same as in the built-in Overview, or own settings for this dashboard.
+  entities – the same as in the built-in Overview, or own settings for this dashboard. *Summaries and shortcuts* (with the
+  built-in settings: *Pages of the summaries*) and *Area states* are collapsible parts of it.
 - **Area layouts:** every area with its own layout is a collapsible block showing its sections and a
   short summary. Inside: badges, the toggles for remaining devices and automations, and the sections
   (title, icon, layout, label). *Refine selection*, *Entity filter* and *Primary entity* are form

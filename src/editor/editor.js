@@ -45,6 +45,10 @@ const STYLE = `
   .top { display: block; }
   .top + .top { margin-top: 12px; }
   .top > .panel-body { padding: 16px 12px; }
+  .sub { margin-top: 12px; }
+  .sub .home-actions { margin-top: -8px; }
+  .sub > .panel-body > .hint { margin: 0 0 -12px; }
+  .sub .home-items, .sub .indicator-items { margin: 0; }
   .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
   .hint { color: var(--secondary-text-color); margin: 0 0 16px; }
   .list { display: flex; flex-direction: column; gap: 8px; }
@@ -179,6 +183,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openTop = loadOpenTop();
     /** @type {Record<string, (header: string, secondary: string) => void>} */
     this._topHeaders = {};
+    /** @type {Record<string, (secondary: string) => void>} */
+    this._subHeaders = {};
     /** @type {any} */
     this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
@@ -500,6 +506,24 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const saved = Object.keys(fromForm(this._form, this._config).area_overrides || {}).length;
     this._topHeaders.areas?.(this._t(TOP_TITLES.areas), n(saved, "editor_one_area", "editor_n_areas", "editor_no_areas_short"));
     this._topHeaders.general?.(this._t(TOP_TITLES.general), n(this._form.rules.length, "editor_one_rule", "editor_n_rules", "editor_no_rules_short"));
+
+    // Parts inside "Overview page"
+    // Count what is saved: pages that are not blank, shortcuts with a path
+    const ownPages = Object.values(this._form.summary_pages || {}).filter((v) => (typeof v === "string" ? v.trim() : v != null)).length;
+    const pagesText = ownPages ? this._t("editor_sum_pages", { n: String(ownPages) }) : this._t("editor_sum_default_pages");
+    if (own) {
+      const items = this._form.home?.items || [];
+      const summaries = items.filter((/** @type {any} */ i) => i.type === "summary");
+      const shortcuts = items.filter((/** @type {any} */ i) => i.type !== "summary" && i.path).length;
+      this._subHeaders.summaries?.([
+        this._t("editor_sum_shown", { n: String(summaries.filter((/** @type {any} */ i) => !i.hidden).length), total: String(summaries.length) }),
+        ...(shortcuts ? [this._t(shortcuts === 1 ? "editor_sum_one_shortcut" : "editor_sum_shortcuts", { n: String(shortcuts) })] : []),
+        ...(ownPages ? [pagesText] : []),
+      ].join(" · "));
+    } else {
+      this._subHeaders.summaries?.(pagesText);
+    }
+    this._subHeaders.indicators?.(states ? this._t(states === 1 ? "editor_one_state_on" : "editor_n_states_on", { n: String(states) }) : this._t("editor_no_states"));
   }
 
   /** @param {string} key */
@@ -572,10 +596,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       hint.style.marginTop = "8px";
       const list = document.createElement("div");
       list.className = "list home-items";
-      block.append(hint, this._subheading("editor_summary_pages"), this._hint("editor_summary_pages_help"), list);
+      const pages = this._subPanel("summaries", "editor_summary_pages");
+      pages.body.append(this._hint("editor_summary_pages_help"), list);
+      block.append(hint, pages.root);
       // Order and visibility come from the built-in Overview; only the pages are set here
       for (const key of SUMMARY_PAGE_KEYS) list.append(this._summaryPanel({ type: "summary", key }));
       this._renderIndicatorBlock(block);
+      this._refreshTopHeaders();
       return;
     }
 
@@ -595,13 +622,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           home.alerts = v.h_alerts || [];
           this._emit();
         }
-      ),
-      this._subheading("editor_summaries"),
-      this._hint("editor_summaries_help")
+      )
     );
+    const summaries = this._subPanel("summaries", "editor_summaries");
     const list = document.createElement("div");
     list.className = "list home-items";
-    block.append(list);
+    summaries.body.append(this._hint("editor_summaries_help"), list);
+    block.append(summaries.root);
     this._renderHomeItems(list);
 
     const actions = document.createElement("div");
@@ -615,8 +642,28 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       }),
       this._button(this._t("editor_copy_home"), () => this._copyHome(), "plain")
     );
-    block.append(actions);
+    summaries.body.append(actions);
     this._renderIndicatorBlock(block);
+    this._refreshTopHeaders();
+  }
+
+  /**
+   * A collapsible part inside "Overview page"; its open state is remembered like the top-level parts.
+   * @param {"summaries" | "indicators"} key
+   * @param {string} titleKey
+   */
+  _subPanel(key, titleKey) {
+    // "summaries" is shared by the own-settings and the built-in-settings variant on purpose:
+    // only one exists at a time, and switching the source keeps it open or closed
+    const id = `home-${key}`;
+    const panel = this._panel(this._t(titleKey), "", this._openTop.has(id), (open) => {
+      if (open) this._openTop.add(id);
+      else this._openTop.delete(id);
+      saveOpenTop(this._openTop);
+    });
+    panel.root.classList.add("sub", `sub-${key}`);
+    this._subHeaders[key] = (/** @type {string} */ secondary) => panel.setHeader(this._t(titleKey), secondary);
+    return panel;
   }
 
   // ---------------------------------------------------------- area indicators
@@ -625,7 +672,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _renderIndicatorBlock(block) {
     const list = document.createElement("div");
     list.className = "list indicator-items";
-    block.append(this._subheading("editor_indicators"), this._hint("editor_indicators_help"), list);
+    const panel = this._subPanel("indicators", "editor_indicators");
+    panel.body.append(this._hint("editor_indicators_help"), list);
+    block.append(panel.root);
     this._renderIndicatorItems(list);
   }
 
