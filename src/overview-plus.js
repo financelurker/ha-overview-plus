@@ -27,7 +27,7 @@ export const VERSION = "0.0.0";
 const LOG = "[overview-plus]";
 
 /** Keys handled by Overview Plus; everything else is passed to the built-in overview view. */
-const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug", "summary_pages"];
+const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug", "summary_pages", "area_indicators"];
 
 /** @type {readonly string[]} */
 const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
@@ -160,6 +160,7 @@ class OverviewPlusDashboardStrategy {
             card_rules: config.card_rules,
             area_overrides: config.area_overrides,
             summary_pages: config.summary_pages,
+            area_indicators: config.area_indicators,
             lazy_render: config.lazy_render,
             debug: config.debug,
           },

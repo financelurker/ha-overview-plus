@@ -32,6 +32,7 @@ import { domainOf, entityContext, entityCategory } from "../registry.js";
  * @property {boolean} [hide_welcome_message]
  * @property {boolean} [hide_suggested_entities]
  * @property {any[]} [shortcuts]
+ * @property {any[]} [area_indicators]  states shown on the area tiles (see area-indicators.js)
  * @property {Record<string, string>} [summary_pages]  pages the summaries lead to (see summary-pages.js)
  */
 
@@ -129,13 +130,15 @@ export function favoriteCard(entityId) {
 
 /**
  * Area tile; `tile` options from area_overrides are merged in. With selected entities
- * (`tile.entities` / `tile.alert_entities`) the Overview Plus area tile is used, since
- * the area card can only show values combined by device class.
+ * (`tile.entities` / `tile.alert_entities`) or area indicators the Overview Plus area
+ * tile is used, since the area card can only show values combined by device class and
+ * has no indicators.
  * @param {any} hass
  * @param {string} areaId
  * @param {Record<string, any> | undefined} tile
+ * @param {any[] | undefined} [indicators] `area_indicators` of the config
  */
-function areaCard(hass, areaId, tile) {
+function areaCard(hass, areaId, tile, indicators) {
   const area = hass.areas?.[areaId];
   /** @type {Record<string, any>} */
   const card = {
@@ -147,13 +150,18 @@ function areaCard(hass, areaId, tile) {
     vertical: true,
     grid_options: { rows: 2, columns: 4 },
   };
-  if (!tile || typeof tile !== "object") return card;
-  const custom = (Array.isArray(tile.entities) && tile.entities.length) || (Array.isArray(tile.alert_entities) && tile.alert_entities.length);
-  if (custom) {
+  const own = tile && typeof tile === "object" ? tile : {};
+  const hasIndicators = Array.isArray(indicators) && indicators.length > 0;
+  const custom = (Array.isArray(own.entities) && own.entities.length) || (Array.isArray(own.alert_entities) && own.alert_entities.length);
+  if (custom || hasIndicators) {
+    // The area card cannot show these: the Overview Plus area tile looks the same and can
     const { display_type: _d, sensor_classes: _s, ...base } = card;
-    return { ...base, ...tile, type: AREA_TILE_TYPE, area: areaId };
+    /** @type {Record<string, any>} */
+    const tileCard = { ...base, ...own, type: AREA_TILE_TYPE, area: areaId };
+    if (hasIndicators) tileCard.indicators = indicators;
+    return tileCard;
   }
-  return { ...card, ...tile, type: "area", area: areaId };
+  return { ...card, ...own, type: "area", area: areaId };
 }
 
 // ---------------------------------------------------------------- generator
@@ -187,13 +195,13 @@ export async function generateOverviewView(hass, options = {}) {
       column_span: MAX_COLUMNS,
       cards: [
         { type: "heading", heading: floorCount > 1 ? floor.name : t(hass, "areas"), heading_style: "title", icon: floorIcon(floor) },
-        ...areas.map((areaId) => areaCard(hass, areaId, overrides[areaId]?.tile)),
+        ...areas.map((areaId) => areaCard(hass, areaId, overrides[areaId]?.tile, options.area_indicators)),
       ],
     });
   }
 
   if (home.areas.length > 0 || hasOtherDevices) {
-    const cards = home.areas.map((areaId) => areaCard(hass, areaId, overrides[areaId]?.tile));
+    const cards = home.areas.map((areaId) => areaCard(hass, areaId, overrides[areaId]?.tile, options.area_indicators));
     if (hasOtherDevices) {
       cards.push({
         type: "tile",

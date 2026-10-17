@@ -23,6 +23,10 @@
 import { fromForm, homeToForm, toForm } from "./editor-config.js";
 import { loadHomeSettings, SUMMARY_KEY_ICONS } from "../home-settings.js";
 import { defaultSummaryPage, SUMMARY_PAGE_KEYS } from "../summary-pages.js";
+import { indicatorColor, INDICATOR_PRESETS } from "../area-indicators.js";
+
+/** Object without undefined / empty values. @param {Record<string, any>} o */
+const dropUnset = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== ""));
 import { areaTileClassOptions, collectOptions, matchSummary, ruleSchema, sectionSchema } from "./schemas.js";
 import { t } from "../i18n.js";
 
@@ -50,7 +54,8 @@ const STYLE = `
   .general, .areas-block { border-top: 1px solid var(--divider-color); padding-top: 24px; }
   .home > ha-form + ha-form { display: block; margin-top: 16px; }
   .home > .subheading { margin-top: 24px; }
-  .home-items { margin: 8px 0 16px; }
+  .home-items, .indicator-items { margin: 8px 0 16px; }
+  .panel-body > .hint { margin: 0 0 -8px; }
   .item-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 12px;
     border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
   .item-row { gap: 0; }
@@ -145,6 +150,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openShortcuts = new Set();
     /** @type {Set<string>} keys of expanded summary blocks */
     this._openSummaries = new Set();
+    /** @type {Set<string>} presets of expanded area indicator blocks */
+    this._openIndicators = new Set();
     /** @type {any} */
     this._opts = undefined;
     /** @type {string | undefined} config last sent to Home Assistant */
@@ -506,6 +513,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       block.append(hint, this._subheading("editor_summary_pages"), this._hint("editor_summary_pages_help"), list);
       // Order and visibility come from the built-in Overview; only the pages are set here
       for (const key of SUMMARY_PAGE_KEYS) list.append(this._summaryPanel({ type: "summary", key }));
+      this._renderIndicatorBlock(block);
       return;
     }
 
@@ -546,6 +554,107 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._button(this._t("editor_copy_home"), () => this._copyHome(), "plain")
     );
     block.append(actions);
+    this._renderIndicatorBlock(block);
+  }
+
+  // ---------------------------------------------------------- area indicators
+
+  /** @param {HTMLElement} block */
+  _renderIndicatorBlock(block) {
+    const list = document.createElement("div");
+    list.className = "list indicator-items";
+    block.append(this._subheading("editor_indicators"), this._hint("editor_indicators_help"), list);
+    this._renderIndicatorItems(list);
+  }
+
+  /** @param {HTMLElement} list */
+  _renderIndicatorItems(list) {
+    list.innerHTML = "";
+    const items = this._form.indicators;
+    const rerender = () => this._renderIndicatorItems(list);
+    const swap = (/** @type {number} */ index, /** @type {number} */ delta) => {
+      const target = index + delta;
+      [items[index], items[target]] = [items[target], items[index]];
+      rerender();
+      this._emit();
+    };
+    items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
+      const move = [
+        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
+        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
+      ];
+      if (item.custom) {
+        const row = document.createElement("div");
+        row.className = "item-row";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = item.custom.name || [].concat(item.custom.entity || []).join(", ") || this._t("editor_indicator_custom");
+        row.append(this._indicatorIcon(item.custom), label, ...move,
+          this._iconButton(ICON.delete, this._t("editor_delete_indicator"), () => {
+            items.splice(index, 1);
+            rerender();
+            this._emit();
+          }));
+        list.append(row);
+        return;
+      }
+      const preset = /** @type {any} */ (INDICATOR_PRESETS)[item.preset];
+      const toggle = /** @type {any} */ (document.createElement(customElements.get("ha-switch") ? "ha-switch" : "input"));
+      if (toggle.localName === "input") toggle.type = "checkbox";
+      toggle.checked = !!item.enabled;
+      toggle.setAttribute("aria-label", this._t(`indicator_${item.preset}`));
+      toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
+      const leading = this._indicatorIcon({ ...preset, ...dropUnset(item) });
+      const secondary = () => (item.enabled ? this._t(`editor_i_style_${item.style || preset.style}`) : this._t(`indicator_${item.preset}_help`));
+      const panel = this._panel(this._t(`indicator_${item.preset}`), secondary(), this._openIndicators.has(item.preset), (open) => {
+        if (open) this._openIndicators.add(item.preset);
+        else this._openIndicators.delete(item.preset);
+      }, { leading, icons: [...move, toggle] });
+      panel.root.classList.add("summary-panel");
+      panel.root.classList.toggle("off", !item.enabled);
+      toggle.addEventListener("change", () => {
+        item.enabled = toggle.checked;
+        panel.root.classList.toggle("off", !item.enabled);
+        panel.setHeader(this._t(`indicator_${item.preset}`), secondary());
+        this._emit();
+      });
+      const styles = ["tile", "icon"].map((value) => ({ value, label: this._t(`editor_i_style_${value}`) }));
+      const hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = this._t(`indicator_${item.preset}_help`);
+      panel.body.append(
+        hint,
+        this._haForm(
+          [
+            { name: "i_style", required: true, selector: { select: { mode: "dropdown", options: styles } } },
+            { name: "", type: "grid", schema: [
+              { name: "i_icon", selector: { icon: { placeholder: preset.icon } } },
+              { name: "i_color", selector: { ui_color: { default_color: preset.color } } },
+            ] },
+          ],
+          { i_style: item.style || preset.style, i_icon: item.icon || "", i_color: item.color || "" },
+          (v) => {
+            item.style = v.i_style === preset.style ? undefined : v.i_style;
+            item.icon = v.i_icon || undefined;
+            item.color = v.i_color || undefined;
+            leading.icon = item.icon || preset.icon;
+            leading.style.color = indicatorColor(item.color || preset.color) || "";
+            panel.setHeader(this._t(`indicator_${item.preset}`), secondary());
+            this._emit();
+          }
+        )
+      );
+      list.append(panel.root);
+    });
+  }
+
+  /** Colored icon of an indicator. @param {any} indicator */
+  _indicatorIcon(indicator) {
+    const icon = /** @type {any} */ (document.createElement("ha-icon"));
+    icon.icon = indicator.icon || "mdi:circle-medium";
+    icon.className = "summary-icon";
+    icon.style.color = indicatorColor(indicator.color) || "";
+    return icon;
   }
 
   /** @param {string} key */

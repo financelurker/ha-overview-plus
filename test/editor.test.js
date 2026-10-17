@@ -396,3 +396,15 @@ test("summary pages are set on the summary itself, also with the built-in settin
   edit(formWith(root(builtin.editor), "sp_security"), { sp_security: "" });
   assert.equal(builtin.last().summary_pages, undefined);
 });
+
+test("area states: switching a preset on writes area_indicators, styles can be changed", () => {
+  const { editor, last } = setup({ type: "custom:overview-plus" });
+  const rows = [...root(editor).querySelectorAll(".indicator-items > details")];
+  assert.equal(rows.length, 12, "all presets listed");
+  const toggle = rows[0].querySelector("input[type=checkbox]");
+  toggle.checked = true;
+  toggle.dispatchEvent(new Event("change"));
+  assert.deepEqual(last().area_indicators, [{ preset: "occupied" }]);
+  edit(formWith(rows[0], "i_style"), { i_style: "icon", i_color: "green" });
+  assert.deepEqual(last().area_indicators, [{ preset: "occupied", style: "icon", color: "green" }]);
+});

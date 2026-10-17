@@ -152,3 +152,11 @@ test("summaries lead to the configured pages; a page of your own replaces a miss
   assert.ok(summaries.includes("light"), "own page: shown without Home Assistant's light page");
   assert.ok(!summaries.includes("climate"));
 });
+
+test("with area indicators every area uses the Overview Plus tile", async () => {
+  const { view } = await generateOverviewView(hass(), { area_indicators: [{ preset: "occupied" }] });
+  const tiles = view.sections.flatMap((s) => s.cards).filter((c) => c.area);
+  assert.ok(tiles.length > 0);
+  assert.ok(tiles.every((c) => c.type === "custom:overview-plus-area-tile" && c.indicators?.[0]?.preset === "occupied"));
+  assert.ok(tiles.every((c) => c.display_type === undefined && c.sensor_classes === undefined));
+});

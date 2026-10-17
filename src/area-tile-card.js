@@ -19,9 +19,14 @@
  * src/panels/lovelace/cards/hui-area-card.ts (compact display type).
  */
 
+import { activeIndicators, indicatorColor, watchedIndicatorEntities } from "./area-indicators.js";
+import { t } from "./i18n.js";
+
 export const AREA_TILE_TYPE = "custom:overview-plus-area-tile";
 const TAG = "overview-plus-area-tile";
 const SEPARATOR = " · ";
+/** Most chips in the row; with more active indicators the last chip shows "+N". */
+const MAX_CHIPS = 4;
 // mdiTextureBox, the default icon of the area card
 const AREA_ICON_PATH = "M20 2H4C2.9 2 2 2.9 2 4V20C2 21.11 2.9 22 4 22H20C21.11 22 22 21.11 22 20V4C22 2.9 21.11 2 20 2M4 6L6 4H10.9L4 10.9V6M4 13.7L13.7 4H18.6L4 18.6V13.7M20 18L18 20H13.1L20 13.1V18M20 10.3L10.3 20H5.4L20 5.4V10.3Z";
 
@@ -40,6 +45,19 @@ const STYLE = `
   ha-tile-info.twoline { --_tile-info-fixed-primary-line-height: var(--ha-space-4); }
   ha-tile-info.twoline::part(primary) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
     white-space: normal; overflow-wrap: anywhere; }
+  /* Area indicators (area-indicators.js): tinted tile and a row of chips above the room icon */
+  ha-card { position: relative; }
+  ha-card.tinted {
+    background: color-mix(in srgb, var(--indicator-color) 16%, var(--ha-card-background, var(--card-background-color, #fff)));
+    border-color: color-mix(in srgb, var(--indicator-color) 45%, transparent);
+  }
+  ha-card.has-chips ha-tile-container { transform: translateY(8px); }
+  .chips { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: none; }
+  .chip { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: #fff; background: var(--chip-color); box-shadow: 0 0 0 2px var(--ha-card-background, var(--card-background-color, #fff));
+    font-size: 11px; font-weight: 600; box-sizing: border-box; }
+  .chip ha-icon { --mdc-icon-size: 13px; display: flex; }
+  .chip.more { background: var(--secondary-text-color); }
   .fallback { display: flex; flex-direction: column; justify-content: center; gap: 2px; height: 100%; padding: 10px;
     box-sizing: border-box; cursor: pointer; }
   .fallback .primary { font-weight: 500; }
@@ -70,6 +88,8 @@ function define() {
       this._key = "";
       /** @type {any} */
       this._layout = undefined;
+      /** @type {{ entities: any, devices: any, areas: any, config: any, ids: string[], classSensors: Record<string, string[]> } | undefined} */
+      this._indicatorCache = undefined;
     }
 
     /** @param {any} v set by Home Assistant ("grid" in sections views) */
@@ -113,7 +133,9 @@ function define() {
 
     /** Entities whose state is shown; the tile only re-renders when one of them changes. */
     _watched() {
-      return [...this._entityIds(), ...this._alertCandidates()];
+      if (!this._hass || !this._config) return [];
+      const cached = this._cached();
+      return [...this._entityIds(), ...this._alertCandidates(), ...cached.ids, ...Object.values(cached.classSensors).flat()];
     }
 
     _watchKey() {
@@ -122,7 +144,10 @@ function define() {
       const area = hass.areas?.[this._config.area];
       return JSON.stringify([
         area?.name, area?.icon, hass.locale?.language,
-        ...this._watched().map((id) => [hass.states[id]?.state, hass.states[id]?.attributes?.unit_of_measurement]),
+        ...this._watched().map((id) => {
+          const attrs = hass.states[id]?.attributes;
+          return [hass.states[id]?.state, attrs?.unit_of_measurement, attrs?.hvac_action, attrs?.action];
+        }),
       ]);
     }
 
@@ -148,8 +173,66 @@ function define() {
       return ids;
     }
 
+    /**
+     * Sensor classes shown when no entities are selected, like the area card:
+     * `sensor_classes`, by default temperature if the area has a temperature sensor.
+     * @returns {string[]}
+     */
+    _sensorClasses() {
+      if (list(this._config.entities).length) return [];
+      if (Array.isArray(this._config.sensor_classes)) return this._config.sensor_classes;
+      return this._hass?.areas?.[this._config.area]?.temperature_entity_id ? ["temperature"] : [];
+    }
+
+    /**
+     * Sensors of the area per class: the area's own temperature / humidity sensor,
+     * otherwise all numeric sensors of that class (their average is shown).
+     * @returns {Record<string, string[]>}
+     */
+    _classSensors() {
+      const hass = this._hass;
+      const area = hass.areas?.[this._config.area];
+      /** @type {Record<string, string[]>} */
+      const result = {};
+      for (const cls of this._sensorClasses()) {
+        const own = cls === "temperature" ? area?.temperature_entity_id : cls === "humidity" ? area?.humidity_entity_id : undefined;
+        if (own) {
+          result[cls] = [own];
+          continue;
+        }
+        result[cls] = Object.keys(hass.entities || {}).filter((id) => {
+          if (!id.startsWith("sensor.")) return false;
+          const entry = hass.entities[id];
+          if (entry.hidden || entry.entity_category) return false;
+          const device = entry.device_id ? hass.devices?.[entry.device_id] : undefined;
+          const areaId = entry.area_id || device?.area_id || (device?.parent_device_id ? hass.devices?.[device.parent_device_id]?.area_id : undefined);
+          return areaId === this._config.area && hass.states?.[id]?.attributes?.device_class === cls;
+        });
+      }
+      return result;
+    }
+
+    /** @param {string[]} ids */
+    _classValue(ids) {
+      const hass = this._hass;
+      const states = ids.map((id) => hass.states?.[id]).filter((s) => s && !isNaN(Number(s.state)) && s.state !== "");
+      if (!states.length) return undefined;
+      const format = (/** @type {any} */ stateObj, /** @type {string} */ value) =>
+        typeof hass.formatEntityState === "function" ? hass.formatEntityState(stateObj, value) : `${value} ${stateObj.attributes?.unit_of_measurement ?? ""}`.trim();
+      if (states.length === 1) return format(states[0], states[0].state);
+      const unit = states[0].attributes?.unit_of_measurement;
+      const same = states.filter((s) => s.attributes?.unit_of_measurement === unit);
+      const avg = same.reduce((sum, s) => sum + Number(s.state), 0) / same.length;
+      return format(same[0], String(Math.round(avg * 10) / 10));
+    }
+
     _secondary() {
       const hass = this._hass;
+      const classes = this._sensorClasses();
+      if (classes.length) {
+        const sensors = this._cached().classSensors;
+        return classes.map((cls) => this._classValue(sensors[cls] || [])).filter(Boolean).join(SEPARATOR);
+      }
       const showNames = !!this._config.show_names;
       return list(this._config.entities)
         .map((e) => {
@@ -236,6 +319,64 @@ function define() {
 
       container.append(icon, info);
       card.appendChild(container);
+      this._renderIndicators(card);
+    }
+
+    /** Entities found by area and class; cached until the registries or the config change. */
+    _cached() {
+      const hass = this._hass;
+      const cache = this._indicatorCache;
+      if (cache && cache.entities === hass.entities && cache.devices === hass.devices && cache.areas === hass.areas && cache.config === this._config) {
+        return cache;
+      }
+      const hasIndicators = Array.isArray(this._config.indicators) && this._config.indicators.length;
+      this._indicatorCache = {
+        entities: hass.entities, devices: hass.devices, areas: hass.areas, config: this._config,
+        ids: hasIndicators ? watchedIndicatorEntities(hass, this._config.area, this._config.indicators) : [],
+        classSensors: this._classSensors(),
+      };
+      return this._indicatorCache;
+    }
+
+    /**
+     * Area states: the first active "tile" indicator tints the tile, "icon" indicators
+     * are chips in a row above the room icon (at most MAX_CHIPS, then "+N").
+     * @param {HTMLElement} card
+     */
+    _renderIndicators(card) {
+      if (!Array.isArray(this._config.indicators) || !this._config.indicators.length) return;
+      const active = activeIndicators(this._hass, this._config.area, this._config.indicators);
+      const tile = active.find((i) => i.style === "tile");
+      if (tile) {
+        const color = indicatorColor(tile.color) || "var(--primary-color)";
+        card.style.setProperty("--indicator-color", color);
+        card.style.setProperty("--tile-color", color);
+        card.classList.add("tinted");
+      }
+      const icons = active.filter((i) => i.style === "icon");
+      if (!icons.length) return;
+      const shown = icons.length > MAX_CHIPS ? icons.slice(0, MAX_CHIPS - 1) : icons;
+      const row = document.createElement("div");
+      row.className = "chips";
+      for (const indicator of shown) {
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.style.setProperty("--chip-color", indicatorColor(indicator.color) || "var(--primary-color)");
+        chip.title = indicator.name || t(this._hass, `indicator_${indicator.key}`);
+        const icon = /** @type {any} */ (document.createElement("ha-icon"));
+        icon.icon = indicator.icon;
+        chip.appendChild(icon);
+        row.appendChild(chip);
+      }
+      if (icons.length > shown.length) {
+        const more = document.createElement("div");
+        more.className = "chip more";
+        more.textContent = `+${icons.length - shown.length}`;
+        more.title = icons.slice(shown.length).map((i) => i.name || t(this._hass, `indicator_${i.key}`)).join(", ");
+        row.appendChild(more);
+      }
+      card.classList.add("has-chips");
+      card.appendChild(row);
     }
   }
 
