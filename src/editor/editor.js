@@ -45,9 +45,7 @@ const STYLE = `
   .top { display: block; }
   .top + .top { margin-top: 12px; }
   .top > .panel-body { padding: 16px 12px; }
-  .heading { font-size: var(--ha-font-size-l, 16px); font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
   .subheading { font-weight: var(--ha-font-weight-medium, 500); margin: 0 0 4px; }
-  .heading + .subheading { margin-top: 16px; }
   .hint { color: var(--secondary-text-color); margin: 0 0 16px; }
   .list { display: flex; flex-direction: column; gap: 8px; }
   .list:empty { display: none; }
@@ -328,7 +326,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       panel.secondary = secondary;
       panel.expanded = expanded;
       panel.outlined = true;
-      panel.addEventListener("expanded-changed", (/** @type {any} */ ev) => onToggle(ev.detail.expanded));
+      // expanded-changed bubbles: react only to this panel, not to panels nested inside it
+      panel.addEventListener("expanded-changed", (/** @type {any} */ ev) => {
+        if (ev.target === panel) onToggle(ev.detail.expanded);
+      });
       if (extras.leading) {
         extras.leading.slot = "leading-icon";
         panel.appendChild(extras.leading);
@@ -417,8 +418,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     homePanel.body.append(homeBlock);
 
     // ---- Area layouts: one block per customized area
-    const areaBlock = areaPanel.body;
-    areaBlock.classList.add("areas-block");
+    const areaBlock = document.createElement("div");
+    areaBlock.className = "block areas-block";
+    areaPanel.body.append(areaBlock);
     areaBlock.append(this._hint("editor_areas_help"));
     this._parts.areas = document.createElement("div");
     this._parts.areas.className = "areas list";
@@ -427,8 +429,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     areaBlock.append(this._parts.areas, this._parts.addArea);
 
     // ---- General: card rules and options for the whole dashboard
-    const generalBlock = generalPanel.body;
-    generalBlock.classList.add("general");
+    const generalBlock = document.createElement("div");
+    generalBlock.className = "block general";
+    generalPanel.body.append(generalBlock);
     this._parts.rules = document.createElement("div");
     this._parts.rules.className = "rules list";
     const ruleActions = document.createElement("div");
@@ -491,9 +494,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const states = (this._form.indicators || []).filter((/** @type {any} */ i) => i.enabled || i.custom).length;
     this._topHeaders.home?.(this._t(TOP_TITLES.home), [
       this._t(own ? "editor_h_source_own" : "editor_h_source_builtin"),
-      ...(states ? [n(states, "editor_one_state", "editor_n_states", "editor_n_states")] : []),
+      ...(states ? [this._t(states === 1 ? "editor_one_state" : "editor_n_states", { n: String(states) })] : []),
     ].join(" · "));
-    this._topHeaders.areas?.(this._t(TOP_TITLES.areas), n(this._form.areas.length, "editor_one_area", "editor_n_areas", "editor_no_areas_short"));
+    // Areas that are saved: an added area without sections or own options has no override yet
+    const saved = Object.keys(fromForm(this._form, this._config).area_overrides || {}).length;
+    this._topHeaders.areas?.(this._t(TOP_TITLES.areas), n(saved, "editor_one_area", "editor_n_areas", "editor_no_areas_short"));
     this._topHeaders.general?.(this._t(TOP_TITLES.general), n(this._form.rules.length, "editor_one_rule", "editor_n_rules", "editor_no_rules_short"));
   }
 
@@ -509,13 +514,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return { hass: this._hass, t: (/** @type {string} */ k, /** @type {any} */ p) => this._t(k, p) };
   }
 
-  /** @param {string} key */
-  _heading(key) {
-    const el = document.createElement("div");
-    el.className = "heading";
-    el.textContent = this._t(key);
-    return el;
-  }
 
   /** @param {string} key */
   _hint(key) {
