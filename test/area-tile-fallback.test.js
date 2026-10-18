@@ -26,3 +26,17 @@ test("fallback shows the area states and switches to the tile once the component
   assert.ok(el.shadowRoot.querySelector("ha-tile-container"));
   assert.equal(el.shadowRoot.querySelectorAll(".chip").length, 1);
 });
+
+test("space for the chips moves icon and text, not the container with the hover background", () => {
+  const el = document.createElement("overview-plus-area-tile");
+  el.setConfig({ type: "custom:overview-plus-area-tile", area: "room", vertical: true, indicators: [{ preset: "lights_on" }] });
+  el.hass = { states: {}, entities: {}, devices: {}, areas: { room: { area_id: "room", name: "Room" } } };
+  document.body.appendChild(el);
+  const css = [...el.shadowRoot.querySelectorAll("style")].map((s) => s.textContent).join("\n");
+  const rules = css.split("}").filter((r) => r.includes("translateY(8px)"));
+  assert.ok(rules.length, "space for the chips is still kept");
+  for (const rule of rules) {
+    const selectors = rule.slice(0, rule.indexOf("{")).split(",").map((s) => s.trim());
+    assert.ok(selectors.every((s) => !s.endsWith("ha-tile-container")), `container is not moved: ${selectors}`);
+  }
+});
