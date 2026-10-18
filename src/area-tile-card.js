@@ -68,8 +68,11 @@ const STYLE = `
     background: var(--tile-bg);
     border-color: color-mix(in srgb, var(--indicator-color) 45%, transparent);
   }
-  /* Space for the chips is kept whenever states are configured, so icons do not jump */
-  ha-card.has-indicators.vertical ha-tile-container { transform: translateY(8px); }
+  /* Space for the chips is kept whenever states are configured, so icons do not jump.
+     Only icon and text move: the container draws the hover and ripple background, which
+     has to stay aligned with the card. */
+  ha-card.has-indicators.vertical ha-tile-container > ha-tile-icon,
+  ha-card.has-indicators.vertical ha-tile-container > ha-tile-info { transform: translateY(8px); }
   .chips { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
   ha-card:not(.vertical) .chips { top: 50%; left: auto; right: 10px; transform: translateY(-50%); }
   .chip { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
