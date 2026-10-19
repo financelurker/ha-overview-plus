@@ -17,13 +17,14 @@ what the built-in dashboard does not let you change:
 
 ## Screenshots
 
-Taken from the Home Assistant demo integration. The summaries row of the overview page (lights, climate, security …) is not shown on them.
+Taken from the Home Assistant demo integration.
 
-**Overview page:** favorites, then one tile per area, grouped by floor. Area states: occupied rooms
-are tinted, chips show heating, cooling, lights and an open window. The *Server* tile shows two
+**Overview page:** favorites, then one tile per area, grouped by floor; on the right the
+summaries (repairs, updates, lights, media players, maintenance, weather …) and a shortcut (*Map*).
+Area states: occupied rooms are tinted, chips show heating, cooling, lights and an open window. The *Server* tile shows two
 selected sensors (CPU and memory) instead of temperature.
 
-![Overview page](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview.png?v=ac1ca4c8be)
+![Overview page](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview.png?v=b9c5b26134)
 
 **Area with its own sections:** *Host* and *Virtual machines* are selected by label, and the area
 name is removed from the card names ("Server CPU load" → "CPU load"). Card rules set the CPU and
@@ -57,7 +58,7 @@ parts, each with a short summary of what is set.
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Area states</b> – which states the area tiles show, their order, tile or chip, icon and color<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=107427816f" alt="Editor: area states"></td>
-<td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=b927038a82" alt="Overview page on a phone"></td>
+<td width="50%" valign="top"><b>Mobile</b> – the overview page on a phone<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=8166147385" alt="Overview page on a phone"></td>
 </tr>
 </table>
 
