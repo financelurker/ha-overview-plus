@@ -72,12 +72,15 @@ const STYLE = `
   .general > ha-form { display: block; margin-bottom: 24px; }
   ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
   .panel-body { display: flex; flex-direction: column; gap: 24px; padding: 12px; }
-  .panel-body > .row.icons { margin-top: -16px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
   .row.split { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   button.fallback.danger { color: var(--error-color, #db4437); }
-  .row.split > .moves { display: flex; gap: 4px; }
+  .entity-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+  .entity-list .list-label { color: var(--primary-text-color); }
+  .entity-row { display: flex; align-items: center; gap: 4px; }
+  .entity-row ha-form { flex: 1; min-width: 0; }
+  .entity-list .list-help { font-size: 12px; color: var(--secondary-text-color); padding: 0 16px; }
   .delete-icon { color: var(--error-color, #db4437); margin-left: 12px; }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
     border-radius: var(--ha-border-radius-md, 12px); background: color-mix(in srgb, var(--error-color, #db4437) 8%, transparent); }
@@ -126,6 +129,19 @@ const sectionShape = (s) => [(s.layout ?? "tiles") === "compact", filled(s.m_yam
 /** Things that change which fields a rule form shows. @param {any} r */
 const ruleShape = (r) => [r.r_action || "replace", r.r_scope || "entity", r.r_tap || "default", filled(r.m_yaml)].join();
 
+/**
+ * Enter and Space on a control in a panel header act on the control, not on the panel:
+ * ha-expansion-panel toggles on these keys in its whole header.
+ * @param {HTMLElement} el
+ */
+const keepKeys = (el) =>
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") ev.stopPropagation();
+  });
+
+/** Field names of an ha-form schema, also inside grids and expandables. @param {any[]} schema @returns {string[]} */
+const fieldNamesOf = (schema) => schema.flatMap((f) => (f.schema ? fieldNamesOf(f.schema) : f.name ? [f.name] : []));
+
 /** @param {string} area */
 const newAreaEntry = (area) => ({
   area,
@@ -159,6 +175,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openAreas = new Set();
     /** @type {Map<string, Set<number>>} per area: indexes of expanded section blocks */
     this._openSections = new Map();
+    /** @type {Set<string>} area ids whose "tile on the overview page" block is expanded */
+    this._openTiles = new Set();
     /** @type {Set<number>} indexes of expanded card rule blocks */
     this._openRules = new Set();
     /** @type {Set<number>} indexes of expanded shortcut blocks */
@@ -213,6 +231,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     // Keep the open/closed state of areas that still exist; open the only area by default
     const ids = new Set(this._form.areas.map((/** @type {any} */ a) => a.area));
     this._openAreas = new Set([...this._openAreas].filter((id) => ids.has(id)));
+    this._openTiles = new Set([...this._openTiles].filter((id) => ids.has(id)));
     if (ids.size === 1) this._openAreas.add([...ids][0]);
     this._openSections = new Map();
     this._openRules = new Set([...this._openRules].filter((i) => i < this._form.rules.length));
@@ -267,6 +286,76 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   }
 
   /**
+   * Ordered list of entities: one entity picker per entry with ↑/↓ (as everywhere in the
+   * editor), its clear button removes the entry, an empty picker at the end adds one.
+   * Entries may be objects with an `entity` key (e.g. `{ entity, name }`); they are kept.
+   * @param {string} name field name: label `editor_<name>`, help `editor_<name>_help`
+   * @param {any[]} values
+   * @param {(values: any[]) => void} onChange
+   */
+  _entityList(name, values, onChange) {
+    const list = [...(Array.isArray(values) ? values : [])];
+    const box = document.createElement("div");
+    box.className = "entity-list";
+    box.dataset.field = name;
+    /** @param {any} v */
+    const idOf = (v) => (typeof v === "string" ? v : v?.entity);
+    /** @param {Record<string, any>} extra */
+    const selector = (extra = {}) => ({ entity: extra });
+    // The visible title names the whole list for screen readers
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", this._t(`editor_${name}`));
+    const changed = () => {
+      onChange([...list]);
+      render();
+    };
+    const render = () => {
+      box.replaceChildren();
+      const label = document.createElement("div");
+      label.className = "list-label";
+      label.textContent = this._t(`editor_${name}`);
+      box.append(label);
+      list.forEach((value, index) => {
+        const row = document.createElement("div");
+        row.className = "entity-row";
+        // Entities already in the list are not offered again
+        const others = list.filter((_, i) => i !== index).map(idOf).filter(Boolean);
+        const picker = this._haForm([{ name: "entity", selector: selector({ exclude_entities: others }) }], { entity: idOf(value) }, (v) => {
+          if (!v.entity) list.splice(index, 1);
+          else list[index] = value && typeof value === "object" ? { ...value, entity: v.entity } : v.entity;
+          changed();
+        });
+        picker.computeLabel = () => "";
+        picker.computeHelper = () => undefined;
+        const moves = this._moveButtons(index, list.length, (delta) => {
+          [list[index], list[index + delta]] = [list[index + delta], list[index]];
+          changed();
+        }, (i) => box.querySelectorAll(":scope > .entity-row")[i]);
+        row.append(picker, ...moves);
+        box.append(row);
+      });
+      const add = this._haForm([{ name: "entity", selector: selector({ exclude_entities: list.map(idOf).filter(Boolean) }) }], {}, (v) => {
+        if (!v.entity) return;
+        list.push(v.entity);
+        changed();
+      });
+      add.classList.add("entity-add");
+      add.computeLabel = () => this._t("editor_add_entity");
+      add.computeHelper = () => undefined;
+      box.append(add);
+      const help = this._t(`editor_${name}_help`);
+      if (help !== `editor_${name}_help`) {
+        const hint = document.createElement("div");
+        hint.className = "list-help";
+        hint.textContent = help;
+        box.append(hint);
+      }
+    };
+    render();
+    return box;
+  }
+
+  /**
    * @param {string} text
    * @param {() => void} onClick
    * @param {string} [appearance]
@@ -298,7 +387,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _confirm(host, message, confirmLabel, onConfirm) {
     const previous = Array.from(host.childNodes);
     // Focus goes back to the button that asked, if Cancel is chosen
-    const trigger = /** @type {HTMLElement | null} */ (/** @type {Document | ShadowRoot} */ (host.getRootNode()).activeElement ?? null);
+    /** @type {HTMLElement | null} */
+    let trigger = null;
+    try {
+      trigger = /** @type {any} */ (host.getRootNode()).activeElement ?? null;
+    } catch {
+      // no focused element to return to
+    }
     const box = document.createElement("div");
     box.className = "confirm";
     box.setAttribute("role", "alertdialog");
@@ -328,7 +423,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     box.append(text, buttons);
     host.replaceChildren(box);
     // ha-button renders its inner button asynchronously
-    requestAnimationFrame(() => cancel.focus());
+    cancel.focus();
+    window.requestAnimationFrame?.(() => cancel.focus());
   }
 
   /**
@@ -364,7 +460,41 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       ev.stopPropagation();
       if (!btn.disabled) onClick();
     });
+    keepKeys(btn);
     return btn;
+  }
+
+  /**
+   * ↑/↓ of entry `index` of `count` – the same everywhere in the editor. `move(delta)`
+   * reorders and re-renders; then the focus goes to the same button of the moved entry,
+   * so keyboard users keep their place.
+   * @param {number} index
+   * @param {number} count
+   * @param {(delta: number) => void} move
+   * @param {(index: number) => Element | null | undefined} entryAt root element of an entry after re-rendering
+   * @returns {HTMLElement[]}
+   */
+  _moveButtons(index, count, move, entryAt) {
+    /** @param {number} delta */
+    const make = (delta) => {
+      const cls = delta < 0 ? "move-up" : "move-down";
+      const btn = this._iconButton(delta < 0 ? ICON.up : ICON.down, this._t(delta < 0 ? "editor_move_up" : "editor_move_down"), () => {
+        move(delta);
+        const root = entryAt(index + delta);
+        if (!root) return;
+        /** @param {string} c */
+        const find = (c) => /** @type {any} */ (root.querySelector(`:scope > .${c}, :scope > .panel-body > .row:first-child > .${c}`));
+        const same = find(cls);
+        const other = find(delta < 0 ? "move-down" : "move-up");
+        const target = same && !same.disabled ? same : other;
+        // HA's buttons render asynchronously: try now and again in the next frame
+        target?.focus?.();
+        window.requestAnimationFrame?.(() => target?.focus?.());
+      }, delta < 0 ? index === 0 : index === count - 1);
+      btn.classList.add(cls);
+      return btn;
+    };
+    return [make(-1), make(1)];
   }
 
   /**
@@ -665,17 +795,21 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     block.append(copyRow);
 
     block.append(
+      this._haForm([{ name: "h_welcome", selector: { boolean: {} } }], { h_welcome: home.welcome }, (v) => {
+        home.welcome = v.h_welcome !== false;
+        this._emit();
+      }),
+      this._entityList("h_favorites", home.favorites, (list) => {
+        home.favorites = list;
+        this._emit();
+      }),
       this._haForm(
         [
-          { name: "h_welcome", selector: { boolean: {} } },
-          { name: "h_favorites", selector: { entity: { multiple: true, reorder: true } } },
           { name: "h_suggested", selector: { boolean: {} } },
           { name: "h_alerts", selector: { entity: { multiple: true } } },
         ],
-        { h_welcome: home.welcome, h_favorites: home.favorites, h_suggested: home.suggested, h_alerts: home.alerts },
+        { h_suggested: home.suggested, h_alerts: home.alerts },
         (v) => {
-          home.welcome = v.h_welcome !== false;
-          home.favorites = v.h_favorites || [];
           home.suggested = v.h_suggested !== false;
           home.alerts = v.h_alerts || [];
           this._emit();
@@ -746,10 +880,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._emit();
     };
     items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
-      const move = [
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
-      ];
+      const move = this._moveButtons(index, items.length, (delta) => swap(index, delta), (i) => list.children[i]);
       if (item.custom !== undefined) {
         const row = document.createElement("div");
         row.className = "item-row";
@@ -779,6 +910,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       toggle.checked = !!item.enabled;
       toggle.setAttribute("aria-label", this._t(`indicator_${item.preset}`));
       toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
+    keepKeys(toggle);
       const leading = this._indicatorIcon({ ...preset, ...dropUnset(item) });
       const secondary = () => (item.enabled ? this._t(`editor_i_style_${item.style || preset.style}`) : this._t(`indicator_${item.preset}_help`));
       const panel = this._panel(this._t(`indicator_${item.preset}`), secondary(), this._openIndicators.has(item.preset), (open) => {
@@ -926,10 +1058,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       rerender();
       this._emit();
     };
-    const moveButtons = (/** @type {number} */ index) => [
-      this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
-      this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
-    ];
+    const moveButtons = (/** @type {number} */ index) =>
+      this._moveButtons(index, items.length, (delta) => swap(index, delta), (i) => list.children[i]);
 
     items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
       if (item.type === "summary") {
@@ -1028,20 +1158,25 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   /** @param {any} entry */
   _renderAreaPanel(entry) {
+    // The order of the area layouts is only the order of the entries in the configuration
+    const areas = this._form.areas;
+    const index = areas.indexOf(entry);
+    /** @param {number} delta */
+    const move = (delta) => {
+      [areas[index], areas[index + delta]] = [areas[index + delta], areas[index]];
+      this._renderAreas();
+      this._emit();
+    };
     const panel = this._panel(this._areaName(entry.area), this._areaSummary(entry), this._openAreas.has(entry.area), (open) => {
       if (open) this._openAreas.add(entry.area);
       else this._openAreas.delete(entry.area);
-    });
+    }, { icons: this._moveButtons(index, areas.length, move, (i) => this._parts.areas?.querySelectorAll(":scope > .area-panel")[i]) });
     panel.root.classList.add("area-panel");
     const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
 
-    const options = this._haForm(this._optionsSchema(entry), this._optionsData(entry), (v) => {
-      const shapeChanged = v.badges !== entry.badges || (v.t_sensors ?? "default") !== (entry.t_sensors ?? "default");
-      Object.assign(entry, v);
-      if (shapeChanged) options.schema = this._optionsSchema(entry);
-      refreshHeader();
-      this._emit();
-    });
+    const options = document.createElement("div");
+    options.className = "area-options";
+    this._renderAreaOptions(entry, options, refreshHeader);
 
     const sections = document.createElement("div");
     sections.className = "sections list";
@@ -1061,6 +1196,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._button(this._t("editor_remove_area"), () => {
         this._form.areas = this._form.areas.filter((/** @type {any} */ a) => a !== entry);
         this._openAreas.delete(entry.area);
+        this._openTiles.delete(entry.area);
         this._openSections.delete(entry.area);
         this._renderAreas();
         this._emit();
@@ -1072,58 +1208,84 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return panel.root;
   }
 
-  /** @param {any} entry */
-  _optionsData(entry) {
-    return {
-      badges: entry.badges,
-      badge_entities: entry.badge_entities,
-      show_default_sections: entry.show_default_sections === true,
-      show_other_devices: entry.show_other_devices,
-      show_automations: entry.show_automations,
-      t_sensors: entry.t_sensors ?? "default",
-      t_sensor_classes: entry.t_sensor_classes,
-      t_entities: entry.t_entities,
-      t_show_names: entry.t_show_names,
-      t_alert_classes: entry.t_alert_classes,
-      t_alert_entities: entry.t_alert_entities,
-      t_color: entry.t_color,
-      t_name: entry.t_name,
+  /**
+   * Options of an area layout: badges, which parts the area view shows, and the tile on
+   * the overview page. Rebuilt when a choice changes which fields are shown.
+   * @param {any} entry
+   * @param {HTMLElement} container
+   * @param {() => void} refreshHeader
+   */
+  _renderAreaOptions(entry, container, refreshHeader) {
+    const rerender = () => this._renderAreaOptions(entry, container, refreshHeader);
+    const changed = () => {
+      refreshHeader();
+      this._emit();
     };
-  }
-
-  /** @param {any} entry */
-  _optionsSchema(entry) {
+    /**
+     * @param {any[]} schema
+     * @param {string[]} shapeKeys fields that change which fields are shown
+     */
+    const form = (schema, shapeKeys = []) => {
+      const names = fieldNamesOf(schema);
+      const data = Object.fromEntries(names.map((n) => [n, entry[n]]));
+      return this._haForm(schema, data, (v) => {
+        const shape = shapeKeys.some((k) => (v[k] ?? "default") !== (entry[k] ?? "default"));
+        Object.assign(entry, v);
+        changed();
+        if (shape) rerender();
+      });
+    };
     const badgeOptions = ["default", "none", "custom"].map((value) => ({ value, label: this._t(`editor_badges_${value}`) }));
     const sensorModes = ["default", "custom", "entities"].map((value) => ({ value, label: this._t(`editor_t_sensors_${value}`) }));
     const tileClasses = areaTileClassOptions(this._hass, entry.area, entry.t_sensor_classes, entry.t_alert_classes);
     /** @param {{ value: string, label: string }[]} options */
     const classes = (options) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options } });
-    return [
-      { name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } },
-      ...(entry.badges === "custom" ? [{ name: "badge_entities", selector: { entity: { multiple: true } } }] : []),
+    entry.t_sensors ??= "default";
+    entry.show_default_sections = entry.show_default_sections === true;
+
+    container.replaceChildren(form([{ name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } }], ["badges"]));
+    if (entry.badges === "custom") {
+      container.append(this._entityList("badge_entities", entry.badge_entities, (list) => {
+        entry.badge_entities = list;
+        changed();
+      }));
+    }
+    container.append(form([
       { name: "show_default_sections", selector: { boolean: {} } },
       { name: "", type: "grid", schema: [
         { name: "show_other_devices", selector: { boolean: {} } },
         { name: "show_automations", selector: { boolean: {} } },
       ] },
-      {
-        name: "", type: "expandable", flatten: true, title: this._t("editor_tile"),
-        schema: [
-          { name: "", type: "grid", schema: [
-            { name: "t_name", selector: { text: {} } },
-            { name: "t_color", selector: { ui_color: {} } },
-          ] },
-          { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
-          ...((entry.t_sensors ?? "default") === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
-          ...((entry.t_sensors ?? "default") === "entities" ? [
-            { name: "t_entities", selector: { entity: { multiple: true, reorder: true } } },
-            { name: "t_show_names", selector: { boolean: {} } },
-          ] : []),
-          { name: "t_alert_classes", selector: classes(tileClasses.alert) },
-          { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-        ],
-      },
-    ];
+    ]));
+
+    // The tile on the overview page
+    const tile = this._panel(this._t("editor_tile"), "", this._openTiles.has(entry.area), (open) => {
+      if (open) this._openTiles.add(entry.area);
+      else this._openTiles.delete(entry.area);
+    });
+    tile.root.classList.add("tile-panel");
+    tile.body.append(form([
+      { name: "", type: "grid", schema: [
+        { name: "t_name", selector: { text: {} } },
+        { name: "t_color", selector: { ui_color: {} } },
+      ] },
+      { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
+      ...(entry.t_sensors === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
+    ], ["t_sensors"]));
+    if (entry.t_sensors === "entities") {
+      tile.body.append(
+        this._entityList("t_entities", entry.t_entities, (list) => {
+          entry.t_entities = list;
+          changed();
+        }),
+        form([{ name: "t_show_names", selector: { boolean: {} } }])
+      );
+    }
+    tile.body.append(form([
+      { name: "t_alert_classes", selector: classes(tileClasses.alert) },
+      { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
+    ]));
+    container.append(tile.root);
   }
 
   /** @param {any} section @param {number} index */
@@ -1145,10 +1307,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const rerender = () => this._renderSections(entry, container, refreshAreaHeader);
     entry.sections.forEach((/** @type {any} */ section, /** @type {number} */ index) => {
       const { header, secondary } = this._sectionHeader(section, index);
+      // Order in the header (also while collapsed), deleting at the end of the body in red
+      const moves = this._moveButtons(index, entry.sections.length, (delta) => this._move(entry, index, delta, rerender), (i) => container.children[i]);
       const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
         if (isOpen) open.add(index);
         else open.delete(index);
-      });
+      }, { icons: moves });
 
       const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
         const before = sectionShape(section);
@@ -1160,16 +1324,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._emit();
       });
 
-      // Order on the left, deleting on the right in red
       const row = document.createElement("div");
-      row.className = "row split";
-      const moves = document.createElement("div");
-      moves.className = "moves";
-      moves.append(
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(entry, index, -1, rerender), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1)
-      );
-      row.append(moves, this._deleteButton("editor_delete_section", () => {
+      row.className = "row";
+      row.append(this._deleteButton("editor_delete_section", () => {
         entry.sections.splice(index, 1);
         const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
         this._openSections.set(entry.area, next);
@@ -1224,19 +1381,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const rules = this._form.rules;
     rules.forEach((/** @type {any} */ rule, /** @type {number} */ index) => {
       const { header, secondary } = this._ruleHeader(rule, index);
-      const panel = this._panel(header, secondary, this._openRules.has(index), (open) => {
-        if (open) this._openRules.add(index);
-        else this._openRules.delete(index);
-      });
-      const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
-        const before = ruleShape(rule);
-        for (const key of Object.keys(rule)) delete rule[key];
-        Object.assign(rule, v);
-        if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
-        const h = this._ruleHeader(rule, index);
-        panel.setHeader(h.header, h.secondary);
-        this._emit();
-      });
       const swap = (/** @type {number} */ delta) => {
         const target = index + delta;
         [rules[index], rules[target]] = [rules[target], rules[index]];
@@ -1249,15 +1393,24 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._renderRules();
         this._emit();
       };
+      // Order in the header (also while collapsed), deleting at the end of the body in red
+      const moves = this._moveButtons(index, rules.length, swap, (i) => container.children[i]);
+      const panel = this._panel(header, secondary, this._openRules.has(index), (open) => {
+        if (open) this._openRules.add(index);
+        else this._openRules.delete(index);
+      }, { icons: moves });
+      const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
+        const before = ruleShape(rule);
+        for (const key of Object.keys(rule)) delete rule[key];
+        Object.assign(rule, v);
+        if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
+        const h = this._ruleHeader(rule, index);
+        panel.setHeader(h.header, h.secondary);
+        this._emit();
+      });
       const row = document.createElement("div");
-      row.className = "row split";
-      const moves = document.createElement("div");
-      moves.className = "moves";
-      moves.append(
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(-1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1)
-      );
-      row.append(moves, this._deleteButton("editor_delete_rule", () => {
+      row.className = "row";
+      row.append(this._deleteButton("editor_delete_rule", () => {
         rules.splice(index, 1);
         this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
         this._renderRules();
