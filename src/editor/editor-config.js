@@ -182,6 +182,27 @@ function hideRulesToForm(hide) {
   ];
 }
 
+/**
+ * "Order" groups of a section as editor rows. Groups the form cannot show (not an object)
+ * are dropped – the area view ignores them as well.
+ * @param {any} sort
+ * @returns {{ domain: string[], device_class: string[] }[]}
+ */
+function sortToForm(sort) {
+  return /** @type {any[]} */ (toList(sort)).filter(isPlainObject).map((g) => ({
+    domain: toList(g.domain).map(String),
+    device_class: toList(g.device_class).map(String),
+  }));
+}
+
+/** @param {any} groups @returns {Record<string, any>[] | undefined} */
+function sortFromForm(groups) {
+  const out = (Array.isArray(groups) ? groups : [])
+    .map((g) => dropEmpty({ domain: fromList(toList(g?.domain).filter(Boolean)), device_class: fromList(toList(g?.device_class).filter(Boolean)) }))
+    .filter((g) => g.domain || g.device_class);
+  return out.length ? out : undefined;
+}
+
 /** @param {any} rules @returns {Record<string, any>[] | string[] | undefined} */
 function hideRulesFromForm(rules) {
   const out = (Array.isArray(rules) ? rules : [])
@@ -195,13 +216,14 @@ function hideRulesFromForm(rules) {
 
 /** @param {any} section */
 function sectionToForm(section) {
-  const { match, entities, primary, ...rest } = isPlainObject(section) ? section : {};
-  // "Hide while in state" has its own rows in the editor, the rest of the entity filter its fields
+  const { match, entities, primary, sort, ...rest } = isPlainObject(section) ? section : {};
+  // "Hide while in state" and "Order" have their own rows in the editor, the rest of the entity filter its fields
   const { hide_states, ...filter } = isPlainObject(entities) ? entities : { hide_states: undefined };
   const others = isPlainObject(entities) ? (Object.keys(filter).length ? filter : undefined) : entities;
   return {
     ...rest, ...matchToFields(match), ...entitiesToFields(others), ...primaryToFields(primary),
     ...(hide_states !== undefined ? { hide_rules: hideRulesToForm(hide_states) } : {}),
+    ...(sort !== undefined ? { sort_groups: sortToForm(sort) } : {}),
   };
 }
 
@@ -259,7 +281,7 @@ function withHideRules(entities, rules) {
 
 /** @param {Record<string, any>} form */
 function formToSection(form) {
-  const { hidden, hide_rules, ...fields } = form || {};
+  const { hidden, hide_rules, sort_groups, ...fields } = form || {};
   const rest = withoutPrefix(withoutPrefix(withoutPrefix(fields, "m_"), "e_"), "p_");
   // A standard category placed in the list: only its key and whether it is hidden
   if (rest.default) return { default: rest.default, ...(hidden === true ? { hidden: true } : {}) };
@@ -268,6 +290,7 @@ function formToSection(form) {
     match: fieldsToMatch(form || {}),
     entities: withHideRules(fieldsToEntities(fields), hideRulesFromForm(hide_rules)),
     primary: fieldsToPrimary(form || {}),
+    sort: sortFromForm(sort_groups),
     ...(hidden === true ? { hidden: true } : {}),
   });
 }

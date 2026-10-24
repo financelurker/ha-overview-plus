@@ -272,3 +272,16 @@ test("hide_states: lists of domains and device classes and mixed lists survive t
   const out = fromForm(toForm(cfg), cfg).area_overrides.r.sections[0].entities.hide_states;
   assert.deepEqual(out, [{ states: ["unavailable"] }, { domain: ["light", "switch"], device_class: ["door", "window"], states: ["on"] }]);
 });
+
+test("sort groups: editor rows and back, lists kept, empty groups not written", () => {
+  const sort = [{ domain: "binary_sensor", device_class: "occupancy" }, { domain: ["switch", "fan"] }];
+  const cfg = { type: "x", area_overrides: { r: { sections: [{ title: "A", match: { label: "a" }, sort }] } } };
+  const form = toForm(cfg);
+  assert.deepEqual(form.areas[0].sections[0].sort_groups, [
+    { domain: ["binary_sensor"], device_class: ["occupancy"] },
+    { domain: ["switch", "fan"], device_class: [] },
+  ]);
+  assert.deepEqual(fromForm(form, cfg).area_overrides.r.sections[0].sort, sort);
+  form.areas[0].sections[0].sort_groups = [{ domain: [], device_class: [] }];
+  assert.equal(fromForm(form, cfg).area_overrides.r.sections[0].sort, undefined);
+});

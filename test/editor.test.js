@@ -797,3 +797,23 @@ test("hide while in state: conditions per section with domain, optional device c
   click(buttons(block, "Delete condition")[0]);
   assert.equal(last().area_overrides.living_room.sections[0].entities, undefined);
 });
+
+test("order of a section: groups with domains and device classes, moved with up/down", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  const first = areaPanel(editor, "Ground › Living room").querySelector(".sections > details");
+  const block = first.querySelector(".sort-groups");
+  assert.ok(block);
+  click(buttons(block, "Add group")[0]);
+  edit(formWith(block, "sg_domain"), { sg_domain: ["light"] });
+  click(buttons(block, "Add group")[0]);
+  edit(forms(block).filter((f) => fieldNames(f.schema).includes("sg_domain"))[1], { sg_domain: ["binary_sensor"], sg_device_class: ["occupancy"] });
+  assert.deepEqual(last().area_overrides.living_room.sections[0].sort, [{ domain: "light" }, { domain: "binary_sensor", device_class: "occupancy" }]);
+  assert.match(summary(block), /2 groups/);
+  click(buttons(block, "Move up")[1]);
+  assert.deepEqual(last().area_overrides.living_room.sections[0].sort.map((g) => g.domain), ["binary_sensor", "light"]);
+  // editing the section form keeps the groups; deleting one
+  edit(sectionForms(first)[0], { title: "A2" });
+  assert.equal(last().area_overrides.living_room.sections[0].sort.length, 2);
+  click(buttons(block, "Delete group")[0]);
+  assert.deepEqual(last().area_overrides.living_room.sections[0].sort, [{ domain: "light" }]);
+});

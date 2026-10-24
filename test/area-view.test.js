@@ -468,3 +468,27 @@ test("hide_states: only entities that have a card decide; plain states mixed wit
   assert.equal(tv.visibility.length, 2);
   assert.deepEqual(tv.visibility[1], { condition: "state", entity: "media_player.tv", state_not: ["off"] });
 });
+
+test("sort: entities in the order of the groups, the rest after them; without groups the default order", () => {
+  const match = { entity: ["light.ceiling", "climate.living", "sensor.living_temp", "media_player.tv", "switch.plug", "sensor.living_hum"] };
+  const ids = (view, title) => view.sections.find((s) => s.cards[0]?.heading === title).cards.slice(1).map((c) => c.entity);
+  const plain = generateAreaView(makeHass(), "living_room", { override: { sections: [{ title: "S", match }] } }).view;
+  assert.deepEqual(ids(plain, "S"), ["light.ceiling", "climate.living", "sensor.living_temp", "sensor.living_hum", "media_player.tv", "switch.plug"],
+    "default: Home Assistant's order");
+  const sorted = generateAreaView(makeHass(), "living_room", { override: { sections: [{ title: "S", match, sort: [
+    { domain: "sensor", device_class: "humidity" },
+    { domain: ["switch", "media_player"] },
+    { domain: "sensor" },
+  ] }] } }).view;
+  assert.deepEqual(ids(sorted, "S"), ["sensor.living_hum", "media_player.tv", "switch.plug", "sensor.living_temp", "light.ceiling", "climate.living"]);
+});
+
+test("sort in grouped layouts: devices keep the default order, entities within a device follow the groups", () => {
+  const section = { title: "Hyp", match: { label: "virt-hypervisor" }, layout: "table", sort: [{ domain: "binary_sensor" }] };
+  const view = generateAreaView(makeHass(), "proxmox", { override: { sections: [section] } }).view;
+  const rows = view.sections[0].cards[1].entities.map((r) => r.entity ?? r);
+  assert.equal(rows[0], "binary_sensor.pve_status");
+  const devices = generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match: { label: "virt-guest" }, layout: "devices", sort: [{ domain: "sensor" }] }] } }).view;
+  assert.deepEqual(devices.sections.slice(1, 3).map((s) => s.cards[0].heading), ["web", "db"], "device order unchanged");
+  assert.equal(devices.sections[1].cards[1].entity, "sensor.vm_web_cpu", "within the device: sensors first");
+});

@@ -50,6 +50,7 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
  * @property {"tiles" | "devices" | "compact" | "table"} [layout]
  * @property {EntitySelection} [entities]
  * @property {any} [primary]                     match spec for the primary entity (layout compact)
+ * @property {SortGroup[]} [sort]                order of the entities: groups by domain (and device class)
  */
 
 /**
@@ -214,6 +215,43 @@ function groupByDevice(entities) {
     groups.set("", rest);
   }
   return groups;
+}
+
+/**
+ * @typedef {Object} SortGroup
+ * @property {string | string[]} [domain]
+ * @property {string | string[]} [device_class]  optional, narrows the group
+ */
+
+/**
+ * Entities in the order of the section's `sort` groups: each entity goes to the first
+ * group it fits, in the default order within a group; entities of no group follow in
+ * the default order. The default order is Home Assistant's (as in the built-in area
+ * view, which takes the categories' filters in turn the same way).
+ * @param {EntityContext[]} list
+ * @param {any} groups
+ * @returns {EntityContext[]}
+ */
+export function sortEntities(list, groups) {
+  const rules = asList(groups)
+    .filter((g) => g && typeof g === "object" && !Array.isArray(g))
+    .map((g) => ({ domains: asList(g.domain).map(String), deviceClasses: asList(g.device_class).map(String) }))
+    .filter((g) => g.domains.length || g.deviceClasses.length);
+  if (!rules.length) return list;
+  const seen = new Set();
+  /** @type {EntityContext[]} */
+  const out = [];
+  for (const rule of rules) {
+    for (const ctx of list) {
+      if (seen.has(ctx.entity_id)) continue;
+      if (rule.domains.length && !rule.domains.includes(ctx.domain)) continue;
+      if (rule.deviceClasses.length && !rule.deviceClasses.includes(deviceClass(ctx))) continue;
+      seen.add(ctx.entity_id);
+      out.push(ctx);
+    }
+  }
+  for (const ctx of list) if (!seen.has(ctx.entity_id)) out.push(ctx);
+  return out;
 }
 
 /**
@@ -637,11 +675,12 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
 
   if (layout === "tiles") {
     // only entities that have a card decide whether the section is shown
-    const built = shown.map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
+    const built = sortEntities(shown, section.sort).map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
     return [hide({ type: "grid", cards: [title, ...built.map(([ctx, c]) => hide(c, [ctx]))] }, built.map(([ctx]) => ctx))];
   }
 
-  const groups = [...groupByDevice(shown)];
+  // Devices in the default order, the entities of each device in the section's order
+  const groups = [...groupByDevice(shown)].map(([id, list]) => /** @type {[string, EntityContext[]]} */ ([id, sortEntities(list, section.sort)]));
 
   if (layout === "devices") {
     /** @type {EntityContext[]} entities that have a card: they decide whether the title is shown */
