@@ -83,7 +83,7 @@ open window; the *Server* tile shows two selected sensors (CPU and memory) inste
 
 <table>
 <tr>
-<td width="50%" valign="top"><b>On a phone</b><br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=8166147385" alt="Overview page on a phone"></td>
+<td width="50%" valign="top"><b>On a phone</b> – the same overview page<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/overview-mobile.png?v=8166147385" alt="Overview page on a phone"></td>
 <td width="50%" valign="top"><b>Editor</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=9b4326fc96" alt="Editor: overview page settings"></td>
 </tr>
 </table>
@@ -117,6 +117,8 @@ The area tiles on the overview page can show what is going on in a room: a **tin
 occupied) and **colored chips** above the room icon (e.g. heating, humidifying). In the editor:
 *Overview page → Area states* – switch states on, order them by importance, choose tile or chip,
 icon and color.
+
+*Editor:* which states the area tiles show, their order, tile or chip, icon and color.
 
 <img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-indicators.png?v=107427816f" alt="Editor: area states" width="420">
 
@@ -176,7 +178,11 @@ Assistant's page (`/light`, `/climate`, …; media players: the media players vi
 In the editor: *Overview page → Summaries and shortcuts* – expand a summary to choose its page (with
 the built-in settings, the list shows only the pages).
 
+*Editor:* order, show or hide the summaries, and the page each one leads to.
+
 <img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-summary-pages.png?v=a5669ad4ca" alt="Editor: pages of the summaries" width="420">
+
+### Options
 
 | Option | Description |
 |---|---|
@@ -254,12 +260,11 @@ strategy:
   device is one entities card: device rules replace it, entity rules can only hide rows.
 - `scope: device` turns all entities of a matching device into one card (first matching rule wins).
 
-**Area with the default layout:** same structure as the built-in Overview. Here a card rule replaces
+**Example:** in the default area view – same structure as the built-in Overview – a card rule replaces
 the climate tile with a thermostat card.
 
 ![Default area view](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-default.png?v=72f181a54e)
 
-<img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup" width="420">
 
 #### Popup on tap
 
@@ -292,13 +297,19 @@ Here a button card opens a tile with cover controls:
 
 ![Popup with a card of your choice](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/popup.png?v=4a4c0c06cf)
 
+*Editor:* a rule that replaces a card and shows another one in a popup on tap.
+
+<img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup" width="420">
+
 ### Area overrides
 
-**Area with its own sections:** *Host* and *Virtual machines* are selected by label, and the area
+An area can get its own layout. **Example:** *Host* and *Virtual machines* are selected by label, and the area
 name is removed from the card names ("Server CPU load" → "CPU load"). Card rules set the CPU and
 memory icons.
 
 ![Area view with own sections](https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections.png?v=2ec8d8bb0b)
+
+*Editor:* badges, tile and sections, selected by label, integration and more.
 
 <img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=e9e0cde19a" alt="Editor: area layout with sections" width="420">
 
