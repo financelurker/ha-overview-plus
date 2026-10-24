@@ -37,6 +37,12 @@ const edit = (form, patch) =>
   form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { ...form.data, ...patch } } }));
 const buttons = (scope, text) => [...scope.querySelectorAll("button")].filter((b) => b.textContent === text);
 const click = (el) => el.dispatchEvent(new Event("click"));
+/** Ordered entity list of a field: its entity values, and helpers to pick, add and move. */
+const entityList = (scope, field) => scope.querySelector(`.entity-list[data-field="${field}"]`);
+const listValues = (list) => [...list.querySelectorAll(".entity-row ha-form")].map((f) => f.data.entity);
+const addEntity = (list, entity) => edit(list.querySelector("ha-form.entity-add"), { entity });
+const rowButton = (list, index, label) => buttons(list.querySelectorAll(".entity-row")[index], label)[0];
+
 /** Area blocks (fallback <details>) with their summary text. */
 const areaPanels = (editor) => [...root(editor).querySelectorAll("details.area-panel")];
 const summary = (panel) => panel.querySelector(":scope > summary").textContent;
@@ -115,12 +121,13 @@ test("conditional fields: primary only for compact, badge entities only for sele
   edit(section, { layout: "compact" });
   assert.ok(fieldNames(section.schema).includes("p_domain"));
 
-  const options = formWith(panel, "badges");
-  assert.ok(!fieldNames(options.schema).includes("badge_entities"));
-  edit(options, { badges: "custom" });
-  assert.ok(fieldNames(options.schema).includes("badge_entities"));
-  edit(options, { badge_entities: ["sensor.pve_cpu"] });
-  assert.deepEqual(last().area_overrides.proxmox.badges, ["sensor.pve_cpu"]);
+  assert.equal(entityList(panel, "badge_entities"), null);
+  edit(formWith(panel, "badges"), { badges: "custom" });
+  addEntity(entityList(panel, "badge_entities"), "sensor.pve_cpu");
+  addEntity(entityList(panel, "badge_entities"), "binary_sensor.pve_status");
+  assert.deepEqual(last().area_overrides.proxmox.badges, ["sensor.pve_cpu", "binary_sensor.pve_status"]);
+  click(rowButton(entityList(panel, "badge_entities"), 1, "Move up"));
+  assert.deepEqual(last().area_overrides.proxmox.badges, ["binary_sensor.pve_status", "sensor.pve_cpu"]);
 });
 
 test("move and delete sections within an area", () => {
@@ -285,11 +292,10 @@ test("field types: required fields, device rules without 'adjust', no area field
 test("tile options: sensor classes only when 'selected sensor classes' is chosen", () => {
   const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
   const panel = areaPanel(editor, "Virtual › Proxmox");
-  const options = formWith(panel, "t_sensors");
-  assert.ok(!fieldNames(options.schema).includes("t_sensor_classes"));
-  edit(options, { t_sensors: "custom" });
-  assert.ok(fieldNames(options.schema).includes("t_sensor_classes"));
-  edit(options, { t_sensor_classes: ["power"], t_alert_classes: ["problem"] });
+  assert.equal(formWith(panel, "t_sensor_classes"), undefined);
+  edit(formWith(panel, "t_sensors"), { t_sensors: "custom" });
+  edit(formWith(panel, "t_sensor_classes"), { t_sensor_classes: ["power"] });
+  edit(formWith(panel, "t_alert_classes"), { t_alert_classes: ["problem"] });
   assert.deepEqual(last().area_overrides.proxmox.tile, { sensor_classes: ["power"], alert_classes: ["problem"] });
 });
 
@@ -305,13 +311,15 @@ test("tile class options come from the area's own regular sensors, plus configur
 
 test("tile with selected entities: entity fields only in that mode", () => {
   const { editor, last } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
-  const options = formWith(areaPanel(editor, "Virtual › Proxmox"), "t_sensors");
-  assert.ok(!fieldNames(options.schema).includes("t_entities"));
-  assert.ok(fieldNames(options.schema).includes("t_alert_entities"));
-  edit(options, { t_sensors: "entities" });
-  assert.ok(fieldNames(options.schema).includes("t_entities"));
-  assert.ok(!fieldNames(options.schema).includes("t_sensor_classes"));
-  edit(options, { t_entities: ["sensor.pve_cpu"], t_show_names: true, t_alert_entities: ["binary_sensor.vm_db_status"] });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  assert.equal(entityList(panel, "t_entities"), null);
+  assert.ok(formWith(panel, "t_alert_entities"));
+  edit(formWith(panel, "t_sensors"), { t_sensors: "entities" });
+  assert.ok(entityList(panel, "t_entities"));
+  assert.equal(formWith(panel, "t_sensor_classes"), undefined);
+  addEntity(entityList(panel, "t_entities"), "sensor.pve_cpu");
+  edit(formWith(panel, "t_show_names"), { t_show_names: true });
+  edit(formWith(panel, "t_alert_entities"), { t_alert_entities: ["binary_sensor.vm_db_status"] });
   assert.deepEqual(last().area_overrides.proxmox.tile, {
     entities: ["sensor.pve_cpu"], show_names: true, alert_entities: ["binary_sensor.vm_db_status"],
   });
@@ -333,11 +341,10 @@ test("overview page: built-in settings by default, own settings as form fields",
   const { editor } = setup({ type: "custom:overview-plus" });
   const source = formWith(root(editor), "h_source");
   assert.equal(source.data.h_source, "builtin");
-  assert.equal(formWith(root(editor), "h_favorites"), undefined, "no own fields while the built-in settings are used");
+  assert.equal(entityList(root(editor), "h_favorites"), null, "no own fields while the built-in settings are used");
 
   const own = setup({ type: "custom:overview-plus", load_home_settings: false, favorite_entities: ["light.lamp"], shortcuts: [{ type: "summary", key: "energy" }] });
-  const fields = formWith(root(own.editor), "h_favorites");
-  assert.deepEqual(fields.data.h_favorites, ["light.lamp"]);
+  assert.deepEqual(listValues(entityList(root(own.editor), "h_favorites")), ["light.lamp"]);
   const rows = homeItemLabels(own.editor);
   assert.equal(rows[0], "Today's energy", "summaries in the saved order");
   assert.equal(rows.length, 7);
@@ -345,7 +352,10 @@ test("overview page: built-in settings by default, own settings as form fields",
 
 test("overview page: editing favorites, hiding a summary, adding a shortcut", () => {
   const { editor, last } = setup({ type: "custom:overview-plus", load_home_settings: false });
-  edit(formWith(root(editor), "h_favorites"), { h_favorites: ["light.lamp", "climate.living"], h_welcome: false });
+  const favorites = entityList(root(editor), "h_favorites");
+  addEntity(favorites, "light.lamp");
+  addEntity(favorites, "climate.living");
+  edit(formWith(root(editor), "h_welcome"), { h_welcome: false });
   assert.deepEqual(last().favorite_entities, ["light.lamp", "climate.living"]);
   assert.equal(last().hide_welcome_message, true);
 
@@ -536,16 +546,18 @@ test("shortcuts: only arrows in the header, deleting is a red button in the expa
   assert.deepEqual(last().shortcuts.filter((s) => s.type === "custom").map((s) => s.label), ["B"]);
 });
 
-test("sections and rules: arrows on the left, red delete button on the right", () => {
+test("sections and rules: arrows in the header, red delete button alone at the end", () => {
   const { editor } = setup({ ...TWO_AREAS, card_rules: [{ match: { domain: "light" }, card: { type: "tile" } }] });
   for (const [scope, label] of [[areaPanel(editor, "Ground › Living room"), "Delete section"], [root(editor).querySelector(".general"), "Delete rule"]]) {
     const remove = buttons(scope, label)[0];
     assert.ok(remove.classList.contains("danger"), label);
     const row = remove.parentElement;
-    assert.ok(row.classList.contains("split"));
-    assert.equal(row.lastElementChild, remove);
-    assert.ok(row.firstElementChild.classList.contains("moves"));
-    assert.ok(buttons(row.firstElementChild, "Move down").length === 1);
+    assert.deepEqual([...row.children], [remove], "the delete button has its row to itself");
+    assert.equal(row, row.parentElement.lastElementChild, "at the end of the expanded part");
+    // header controls (in the fallback: their own row at the top of the body): the arrows only
+    const moves = buttons(scope, "Move down")[0].parentElement;
+    assert.notEqual(moves, row);
+    assert.equal(buttons(moves, label).length, 0);
   }
 });
 
@@ -601,4 +613,31 @@ test("area layout: the default sections can be switched on, shown in the area su
   assert.match(summary(panel), /with default sections/);
   edit(formWith(panel, "show_default_sections"), { show_default_sections: false });
   assert.equal(last().area_overrides.living_room.show_default_sections, undefined);
+});
+
+test("entity lists: arrows reorder, clearing a picker removes, objects are kept, chosen ones are not offered again", () => {
+  const { editor, last } = setup({
+    type: "custom:overview-plus",
+    area_overrides: { proxmox: { tile: { entities: ["sensor.pve_cpu", { entity: "sensor.pve_uptime", name: "Up" }, "sensor.vm_web_cpu"] } } },
+  });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const list = () => entityList(panel, "t_entities");
+  assert.deepEqual(listValues(list()), ["sensor.pve_cpu", "sensor.pve_uptime", "sensor.vm_web_cpu"]);
+  assert.ok(rowButton(list(), 0, "Move up").disabled, "the first cannot move up");
+  assert.ok(rowButton(list(), 2, "Move down").disabled, "the last cannot move down");
+  click(rowButton(list(), 0, "Move down"));
+  assert.deepEqual(last().area_overrides.proxmox.tile.entities, [{ entity: "sensor.pve_uptime", name: "Up" }, "sensor.pve_cpu", "sensor.vm_web_cpu"]);
+  edit(list().querySelectorAll(".entity-row ha-form")[0], { entity: "sensor.vm_db_cpu" });
+  assert.deepEqual(last().area_overrides.proxmox.tile.entities[0], { entity: "sensor.vm_db_cpu", name: "Up" }, "the name stays");
+  edit(list().querySelectorAll(".entity-row ha-form")[1], { entity: undefined });
+  assert.deepEqual(last().area_overrides.proxmox.tile.entities, [{ entity: "sensor.vm_db_cpu", name: "Up" }, "sensor.vm_web_cpu"]);
+  const add = list().querySelector("ha-form.entity-add");
+  assert.deepEqual(add.schema[0].selector.entity.exclude_entities, ["sensor.vm_db_cpu", "sensor.vm_web_cpu"]);
+});
+
+test("ordered entity lists have no drag handles anywhere in the editor", () => {
+  const { editor } = setup({ type: "custom:overview-plus", load_home_settings: false, area_overrides: { proxmox: { badges: ["sensor.pve_cpu"], tile: { entities: ["sensor.pve_cpu"] } } } });
+  const all = forms(root(editor)).flatMap((f) => (function walk(schema) { return schema.flatMap((x) => (x.schema ? walk(x.schema) : [x])); })(f.schema));
+  assert.ok(!all.some((field) => field.selector?.entity?.reorder), "no reorder (drag) entity selector");
+  for (const field of ["h_favorites", "badge_entities", "t_entities"]) assert.ok(entityList(root(editor), field), field);
 });
