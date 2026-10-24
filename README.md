@@ -51,7 +51,7 @@ parts, each with a short summary of what is set.
 <table>
 <tr>
 <td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=9b4326fc96" alt="Editor: overview page settings"></td>
-<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=7fe53dde96" alt="Editor: area layout with sections"></td>
+<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=e9e0cde19a" alt="Editor: area layout with sections"></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup"></td>
@@ -359,9 +359,22 @@ looks like the compact area card:
 When an area has `sections`, the configured sections are shown in order, followed by all remaining
 devices of the area and its automations, as in the default view. The standard categories (lights,
 climate, security, media players, scenes) are left out – unless `show_default_sections: true` is set:
-then they come first, followed by the configured sections, the remaining devices and the automations.
-This way an area like *Proxmox* shows only its own sections, while an *Office* keeps the default view
-and gains e.g. a *Multimedia* section with the power plugs of TV, receiver and speakers.
+then they are shown too, first by default. This way an area like *Proxmox* shows only its own
+sections, while an *Office* keeps the default view and gains e.g. a *Multimedia* section with the
+power plugs of TV, receiver and speakers.
+
+```yaml
+      show_default_sections: true
+      sections:
+        - default: light               # light, climate, security, media_players, scenes
+        - title: Multimedia
+          match: { label: multimedia }
+        - default: climate
+          hidden: true                 # any section, own or default, can be hidden
+```
+
+Standard categories the list does not name come first. A **hidden** section shows nothing and
+selects nothing: its entities appear with the remaining devices.
 
 - An **entity** is shown only once, in the first section that selects it (`match` and `entities`).
   The configured sections select first, the standard categories take what is left. Other entities of

@@ -41,6 +41,8 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
 
 /**
  * @typedef {Object} OverrideSection
+ * @property {string} [default]                  a standard category instead of an own section (see DEFAULT_SECTIONS)
+ * @property {boolean} [hidden]                  not shown; its entities appear with the remaining devices
  * @property {string} [title]
  * @property {string} [icon]
  * @property {any} match
@@ -121,6 +123,28 @@ const navigate = (path) => ({ action: "navigate", navigation_path: path });
  */
 const deviceTapAction = (hass, device) =>
   hass.user?.is_admin && device ? navigate(`/config/devices/device/${device.id}`) : undefined;
+
+/** Standard categories that can be placed in the list of sections, in their default order. */
+export const DEFAULT_SECTIONS = ["light", "climate", "security", "media_players", "scenes"];
+
+/**
+ * Order of the sections in the view: category keys (strings) and own section entries.
+ * @param {OverrideSection[]} configured
+ * @param {OverrideSection[]} ownList
+ * @param {boolean} showCategories
+ * @param {boolean} withDefaults
+ * @returns {(string | OverrideSection)[]}
+ */
+function displayOrder(configured, ownList, showCategories, withDefaults) {
+  if (!showCategories) return ownList;
+  if (!withDefaults) return [...DEFAULT_SECTIONS, ...ownList];
+  const placed = configured.filter((s) => !s.default || DEFAULT_SECTIONS.includes(String(s.default)));
+  const named = new Set(placed.filter((s) => s.default).map((s) => String(s.default)));
+  /** @type {(string | OverrideSection)[]} */
+  const order = DEFAULT_SECTIONS.filter((key) => !named.has(key));
+  for (const s of placed) order.push(s.default ? String(s.default) : s);
+  return [...new Set(order)];
+}
 
 /**
  * Tap action of a configured section's title: the device page if the section shows one
@@ -215,7 +239,11 @@ export function generateAreaView(hass, areaId, options = {}) {
   if (!area) throw new Error(t(hass, "unknown_area", { area: areaId }));
 
   const override = options.override;
-  const hasOverride = Array.isArray(override?.sections) && override.sections.length > 0;
+  const configured = Array.isArray(override?.sections) ? override.sections.filter((s) => s && typeof s === "object") : [];
+  /** @type {OverrideSection[]} own sections (entries with `default` stand for a standard category) */
+  const ownList = configured.filter((s) => !s.default);
+  const hasOverride = ownList.length > 0;
+  const withDefaults = override?.show_default_sections === true;
   const highlight = createCardFactory(options.card_rules, "area");
   const other = createCardFactory(options.card_rules, "area_other");
 
@@ -260,8 +288,10 @@ export function generateAreaView(hass, areaId, options = {}) {
   const sections = [];
   /** @type {Set<string>} entity ids already shown or intentionally consumed */
   const consumed = new Set();
-  /** @type {Record<string, any>[]} configured sections, shown after the standard categories */
-  const ownSections = [];
+  /** @type {Map<any, Record<string, any>[]>} built own sections, by their config entry */
+  const ownBuilt = new Map();
+  /** @type {Record<string, Record<string, any>>} built standard categories, by key */
+  const categoryBuilt = {};
 
   // ---------------------------------------------------------------- badges
   let badgeEntities;
@@ -275,37 +305,44 @@ export function generateAreaView(hass, areaId, options = {}) {
   const badges = badgeEntities.map((b) => ({ type: "entity", ...b }));
 
   // ---------------------------------------------------- highlighted sections
-  if (hasOverride) {
-    for (const [index, section] of /** @type {OverrideSection[]} */ (override.sections).entries()) {
-      // A section without selection matches nothing (not everything), so an empty
-      // section added in the editor does not swallow the whole area.
-      const hasMatch =
-        section.match != null &&
-        !(Array.isArray(section.match) && section.match.length === 0) &&
-        !(typeof section.match === "object" && !Array.isArray(section.match) && Object.keys(section.match).length === 0);
-      const matched = hasMatch
-        ? all.filter((ctx) => !consumed.has(ctx.entity_id) && matches(section.match, ctx))
-        : [];
-      // An entity belongs to the first section that shows it. Other entities of the same
-      // device stay available for later sections and the remaining devices below, as in
-      // the built-in area view (where the categories take single entities of a device).
-      const shown = matched.filter(selectionFilter(section.entities));
-      for (const ctx of shown) consumed.add(ctx.entity_id);
-      const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined, sectionTapAction(hass, section, shown, stripNames ? area : undefined));
-      report.sections.push({
-        title: section.title ?? `#${index + 1}`,
-        layout: section.layout ?? "tiles",
-        devices: [...new Set(shown.map((ctx) => (ctx.device ? deviceName(ctx.device) : ctx.entity_id)))],
-        entities: shown.length,
-      });
-      ownSections.push(...built);
-    }
+  // Own sections select first (explicit configuration wins), in their order; hidden ones
+  // select nothing, so their entities appear with the remaining devices.
+  for (const [index, section] of ownList.entries()) {
+    if (section.hidden === true) continue;
+    // A section without selection matches nothing (not everything), so an empty
+    // section added in the editor does not swallow the whole area.
+    const hasMatch =
+      section.match != null &&
+      !(Array.isArray(section.match) && section.match.length === 0) &&
+      !(typeof section.match === "object" && !Array.isArray(section.match) && Object.keys(section.match).length === 0);
+    const matched = hasMatch
+      ? all.filter((ctx) => !consumed.has(ctx.entity_id) && matches(section.match, ctx))
+      : [];
+    // An entity belongs to the first section that shows it. Other entities of the same
+    // device stay available for later sections and the remaining devices below, as in
+    // the built-in area view (where the categories take single entities of a device).
+    const shown = matched.filter(selectionFilter(section.entities));
+    for (const ctx of shown) consumed.add(ctx.entity_id);
+    const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined, sectionTapAction(hass, section, shown, stripNames ? area : undefined));
+    report.sections.push({
+      title: section.title ?? `#${index + 1}`,
+      layout: section.layout ?? "tiles",
+      devices: [...new Set(shown.map((ctx) => (ctx.device ? deviceName(ctx.device) : ctx.entity_id)))],
+      entities: shown.length,
+    });
+    ownBuilt.set(section, built);
   }
-  if (!hasOverride || override?.show_default_sections === true) {
-    // The standard categories take what the configured sections left
+
+  // ------------------------------------------------------ standard categories
+  // Shown without own sections (the default view) or with show_default_sections. They take
+  // what the own sections left; a hidden one takes nothing.
+  const showCategories = !hasOverride || withDefaults;
+  if (showCategories) {
+    /** @type {Set<string>} */
+    const hiddenKeys = new Set(withDefaults ? configured.filter((s) => s.default && s.hidden === true).map((s) => String(s.default)) : []);
     const free = all.filter((ctx) => !consumed.has(ctx.entity_id));
     const bySummary = Object.fromEntries(
-      Object.entries(SUMMARY_FILTERS).map(([key, filters]) => [key, findEntities(free, filters)])
+      Object.entries(SUMMARY_FILTERS).map(([key, filters]) => [key, hiddenKeys.has(key) ? [] : findEntities(free, filters)])
     );
     for (const list of Object.values(bySummary)) for (const ctx of list) consumed.add(ctx.entity_id);
 
@@ -321,7 +358,7 @@ export function generateAreaView(hass, areaId, options = {}) {
         condition: "or",
         conditions: light.map((ctx) => ({ condition: "state", entity: ctx.entity_id, state: "on" })),
       };
-      sections.push({
+      categoryBuilt.light = {
         type: "grid",
         cards: [
           headingCard(t(hass, "light"), SUMMARY_ICONS.light, {
@@ -341,7 +378,7 @@ export function generateAreaView(hass, areaId, options = {}) {
           }),
           ...compact(light.map((ctx) => card(highlight, ctx))),
         ],
-      });
+      };
     }
     /** @type {[EntityContext[], string][]} */
     const simple = [
@@ -351,19 +388,19 @@ export function generateAreaView(hass, areaId, options = {}) {
     ];
     for (const [list, key] of simple) {
       if (!list.length) continue;
-      sections.push({
+      categoryBuilt[key] = {
         type: "grid",
         cards: [
           headingCard(t(hass, key), SUMMARY_ICONS[key], { tap_action: pageAction(key) }),
           ...compact(list.map((ctx) => card(highlight, ctx))),
         ],
-      });
+      };
     }
 
-    const scenes = free.filter(simpleFilter({ domain: "scene", entity_category: "none" }));
+    const scenes = hiddenKeys.has("scenes") ? [] : free.filter(simpleFilter({ domain: "scene", entity_category: "none" }));
     for (const ctx of scenes) consumed.add(ctx.entity_id);
     if (scenes.length) {
-      sections.push({
+      categoryBuilt.scenes = {
         type: "grid",
         cards: [
           headingCard(t(hass, "scenes"), SUMMARY_ICONS.scenes, {
@@ -371,11 +408,17 @@ export function generateAreaView(hass, areaId, options = {}) {
           }),
           ...compact(scenes.map((ctx) => card(highlight, ctx))),
         ],
-      });
+      };
     }
   }
 
-  sections.push(...ownSections);
+  // Display order: the configured list (standard categories it does not name come first),
+  // or the standard categories followed by the own sections
+  for (const entry of displayOrder(configured, ownList, showCategories, withDefaults)) {
+    if (typeof entry === "string") {
+      if (categoryBuilt[entry]) sections.push(categoryBuilt[entry]);
+    } else sections.push(...(ownBuilt.get(entry) || []));
+  }
 
   // ------------------------------------------------------ remaining devices
   // Automations an own section already shows are not repeated

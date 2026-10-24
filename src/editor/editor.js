@@ -20,6 +20,8 @@
  * without re-rendering (keeps the focus); structure changes re-render the affected part.
  */
 
+import { DEFAULT_SECTIONS } from "../views/area-view.js";
+import { SUMMARY_ICONS } from "../entity-filter.js";
 import { fromForm, homeToForm, toForm } from "./editor-config.js";
 import { loadHomeSettings, SUMMARY_KEY_ICONS } from "../home-settings.js";
 import { defaultSummaryPage, SUMMARY_PAGE_KEYS } from "../summary-pages.js";
@@ -81,7 +83,9 @@ const STYLE = `
   .entity-row { display: flex; align-items: center; gap: 4px; }
   .entity-row ha-form { flex: 1; min-width: 0; }
   .entity-list .list-help { font-size: 12px; color: var(--secondary-text-color); padding: 0 16px; }
-  .delete-icon { color: var(--error-color, #db4437); margin-left: 12px; }
+  .delete-icon { color: var(--error-color, #db4437); }
+  .col-empty { display: inline-block; width: 48px; height: 1px; flex: none; }
+  .item-row .secondary { display: block; font-size: 12px; font-weight: normal; color: var(--secondary-text-color); }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
     border-radius: var(--ha-border-radius-md, 12px); background: color-mix(in srgb, var(--error-color, #db4437) 8%, transparent); }
   .confirm .row { justify-content: flex-end; gap: 8px; }
@@ -978,11 +982,22 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {() => void} onChange
    */
   _summaryToggle(item, onChange) {
+    return this._visibleToggle(item, this._t(item.key), onChange);
+  }
+
+  /**
+   * Switch shown / hidden of an entry with `hidden: true` when hidden; always the last
+   * column of a row (after ↑/↓), as everywhere in the editor.
+   * @param {any} item
+   * @param {string} name for screen readers
+   * @param {() => void} onChange
+   */
+  _visibleToggle(item, name, onChange) {
     const toggle = /** @type {any} */ (document.createElement(customElements.get("ha-switch") ? "ha-switch" : "input"));
     if (toggle.localName === "input") toggle.type = "checkbox";
     toggle.checked = !item.hidden;
     toggle.title = this._t("editor_show");
-    toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${this._t(item.key)}`);
+    toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${name}`);
     // inside a panel header: do not expand or collapse the panel
     toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
     toggle.addEventListener("change", () => {
@@ -992,6 +1007,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._emit();
     });
     return toggle;
+  }
+
+  /** Empty last column, so ↑/↓ line up with rows that have a switch there. */
+  _emptyColumn() {
+    const span = document.createElement("span");
+    span.className = "col-empty";
+    span.setAttribute("aria-hidden", "true");
+    return span;
   }
 
   /**
@@ -1074,7 +1097,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const leading = /** @type {any} */ (document.createElement("ha-icon"));
       leading.icon = item.icon || "mdi:link";
       leading.className = "summary-icon";
-      const controls = moveButtons(index);
+      const controls = [...moveButtons(index), this._emptyColumn()];
       const panel = this._panel(header(), item.label ? item.path || "" : "", this._openShortcuts.has(index), (open) => {
         if (open) this._openShortcuts.add(index);
         else this._openShortcuts.delete(index);
@@ -1149,7 +1172,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   /** @param {any} entry */
   _areaSummary(entry) {
-    const n = entry.sections.length;
+    const n = entry.sections.filter((/** @type {any} */ s) => !s.default).length;
     const parts = [this._t(n === 1 ? "editor_one_section" : "editor_n_sections", { n: String(n) })];
     if (entry.show_default_sections === true) parts.push(this._t("editor_with_default_sections"));
     if (entry.badges !== "default") parts.push(`${this._t("editor_badges")}: ${this._t(`editor_badges_${entry.badges}`)}`);
@@ -1174,13 +1197,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     panel.root.classList.add("area-panel");
     const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
 
-    const options = document.createElement("div");
-    options.className = "area-options";
-    this._renderAreaOptions(entry, options, refreshHeader);
-
     const sections = document.createElement("div");
     sections.className = "sections list";
     const renderSections = () => this._renderSections(entry, sections, refreshHeader);
+
+    const options = document.createElement("div");
+    options.className = "area-options";
+    this._renderAreaOptions(entry, options, refreshHeader, renderSections);
 
     // Adding on the left, removing the whole layout far away on the right and in red
     const actions = document.createElement("div");
@@ -1214,9 +1237,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {any} entry
    * @param {HTMLElement} container
    * @param {() => void} refreshHeader
+   * @param {() => void} renderSections
    */
-  _renderAreaOptions(entry, container, refreshHeader) {
-    const rerender = () => this._renderAreaOptions(entry, container, refreshHeader);
+  _renderAreaOptions(entry, container, refreshHeader, renderSections) {
+    const rerender = () => this._renderAreaOptions(entry, container, refreshHeader, renderSections);
     const changed = () => {
       refreshHeader();
       this._emit();
@@ -1230,6 +1254,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const data = Object.fromEntries(names.map((n) => [n, entry[n]]));
       return this._haForm(schema, data, (v) => {
         const shape = shapeKeys.some((k) => (v[k] ?? "default") !== (entry[k] ?? "default"));
+        // The standard categories appear in / disappear from the list of sections
+        if ("show_default_sections" in v && (v.show_default_sections === true) !== (entry.show_default_sections === true)) {
+          this._setDefaultSections(entry, v.show_default_sections === true);
+          renderSections();
+        }
         Object.assign(entry, v);
         changed();
         if (shape) rerender();
@@ -1292,7 +1321,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _sectionHeader(section, index) {
     const header = section.title || this._t("editor_section_n", { n: String(index + 1) });
     const selection = matchSummary(this._ctx(), section);
-    const secondary = [this._t(`editor_layout_${section.layout || "tiles"}`), selection].filter(Boolean).join(" · ");
+    const secondary = [
+      section.hidden ? this._t("editor_hidden") : "",
+      this._t(`editor_layout_${section.layout || "tiles"}`),
+      selection,
+    ].filter(Boolean).join(" · ");
     return { header, secondary };
   }
 
@@ -1305,21 +1338,56 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     container.innerHTML = "";
     const open = this._sectionState(entry.area);
     const rerender = () => this._renderSections(entry, container, refreshAreaHeader);
+    let own = 0;
     entry.sections.forEach((/** @type {any} */ section, /** @type {number} */ index) => {
-      const { header, secondary } = this._sectionHeader(section, index);
-      // Order in the header (also while collapsed), deleting at the end of the body in red
+      // Same columns as everywhere: [⌄] ↑ ↓ shown/hidden
       const moves = this._moveButtons(index, entry.sections.length, (delta) => this._move(entry, index, delta, rerender), (i) => container.children[i]);
+
+      // A standard category (with "Show the default sections"): order and shown/hidden only
+      if (section.default) {
+        const row = document.createElement("div");
+        row.className = "item-row default-section";
+        row.dataset.default = String(section.default);
+        const icon = /** @type {any} */ (document.createElement("ha-icon"));
+        icon.icon = /** @type {Record<string, string>} */ (SUMMARY_ICONS)[section.default] || "mdi:view-dashboard";
+        const label = document.createElement("span");
+        label.className = "label";
+        const name = this._t(String(section.default));
+        label.textContent = name;
+        const note = document.createElement("span");
+        note.className = "secondary";
+        note.textContent = this._t("editor_default_section");
+        label.append(note);
+        const toggle = this._visibleToggle(section, name, () => row.classList.toggle("off", !!section.hidden));
+        row.classList.toggle("off", !!section.hidden);
+        row.append(icon, label, ...moves, toggle);
+        container.appendChild(row);
+        return;
+      }
+
+      const number = own++;
+      const { header, secondary } = this._sectionHeader(section, number);
+      const toggle = this._visibleToggle(section, header, () => {
+        const h = this._sectionHeader(section, number);
+        panel.setHeader(h.header, h.secondary);
+        panel.root.classList.toggle("off", !!section.hidden);
+      });
       const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
         if (isOpen) open.add(index);
         else open.delete(index);
-      }, { icons: moves });
+      }, { icons: [...moves, toggle] });
+      panel.root.classList.toggle("off", !!section.hidden);
 
       const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
         const before = sectionShape(section);
+        const hidden = section.hidden;
         for (const key of Object.keys(section)) delete section[key];
         Object.assign(section, v);
+        // shown/hidden is set by the switch in the header, not by the form
+        if (hidden) section.hidden = true;
+        else delete section.hidden;
         if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
-        const h = this._sectionHeader(section, index);
+        const h = this._sectionHeader(section, number);
         panel.setHeader(h.header, h.secondary);
         this._emit();
       });
@@ -1337,6 +1405,26 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       panel.body.append(form, row);
       container.appendChild(panel.root);
     });
+  }
+
+  /**
+   * "Show the default sections" switched: the standard categories are added to the list
+   * of sections (first, in their default order) or removed from it. Expanded own
+   * sections stay expanded.
+   * @param {any} entry
+   * @param {boolean} on
+   */
+  _setDefaultSections(entry, on) {
+    const open = this._sectionState(entry.area);
+    const openSections = [...open].map((i) => entry.sections[i]).filter(Boolean);
+    const own = entry.sections.filter((/** @type {any} */ s) => !s.default);
+    if (on) {
+      const present = new Set(entry.sections.filter((/** @type {any} */ s) => s.default).map((/** @type {any} */ s) => s.default));
+      entry.sections = [...DEFAULT_SECTIONS.filter((key) => !present.has(key)).map((key) => ({ default: key })), ...entry.sections];
+    } else {
+      entry.sections = own;
+    }
+    this._openSections.set(entry.area, new Set(openSections.map((s) => entry.sections.indexOf(s)).filter((i) => i >= 0)));
   }
 
   /**

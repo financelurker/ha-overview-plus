@@ -23,6 +23,7 @@
  * and the same criteria as exclusions (m_not_*). Primary entity: p_domain, p_device_class (lists).
  */
 
+import { DEFAULT_SECTIONS } from "../views/area-view.js";
 import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
 import { INDICATOR_PRESETS } from "../area-indicators.js";
 
@@ -165,10 +166,41 @@ function sectionToForm(section) {
   return { ...rest, ...matchToFields(match), ...entitiesToFields(entities), ...primaryToFields(primary) };
 }
 
+/**
+ * The list of sections as the editor shows it: with "Show the default sections" the
+ * standard categories are entries of the list – those the configuration does not place
+ * come first, where the area view shows them. Without it there are none.
+ * @param {any} sections
+ * @param {boolean} withDefaults
+ */
+function sectionsToForm(sections, withDefaults) {
+  const list = (Array.isArray(sections) ? sections : []).filter((s) => !isPlainObject(s) || !s.default || (withDefaults && DEFAULT_SECTIONS.includes(s.default)));
+  const placed = new Set(list.filter((s) => isPlainObject(s) && s.default).map((s) => s.default));
+  const missing = withDefaults ? DEFAULT_SECTIONS.filter((key) => !placed.has(key)).map((key) => ({ default: key })) : [];
+  return [...missing, ...list].map(sectionToForm);
+}
+
+/**
+ * The standard categories in their default place (first, default order, none hidden) need
+ * no entries: the area view puts them there anyway. Keeps the configuration short.
+ * @param {Record<string, any>[]} list
+ */
+function withoutDefaultOrder(list) {
+  const defaults = list.filter((s) => s.default);
+  const leading = list.slice(0, DEFAULT_SECTIONS.length);
+  const isDefaultPlace = defaults.length === DEFAULT_SECTIONS.length &&
+    leading.every((s, i) => s.default === DEFAULT_SECTIONS[i] && s.hidden !== true);
+  return isDefaultPlace ? list.slice(DEFAULT_SECTIONS.length) : list;
+}
+
 /** @param {Record<string, any>} form */
 function formToSection(form) {
-  const rest = withoutPrefix(withoutPrefix(withoutPrefix(form || {}, "m_"), "e_"), "p_");
+  const { hidden, ...fields } = form || {};
+  const rest = withoutPrefix(withoutPrefix(withoutPrefix(fields, "m_"), "e_"), "p_");
+  // A standard category placed in the list: only its key and whether it is hidden
+  if (rest.default) return { default: rest.default, ...(hidden === true ? { hidden: true } : {}) };
   return dropEmpty({
+    ...(hidden === true ? { hidden: true } : {}),
     ...rest,
     match: fieldsToMatch(form || {}),
     entities: fieldsToEntities(form || {}),
@@ -386,7 +418,7 @@ export function toForm(config) {
         show_default_sections: show_default_sections === true,
         show_other_devices: show_other_devices !== false,
         show_automations: show_automations !== false,
-        sections: (Array.isArray(sections) ? sections : []).map(sectionToForm),
+        sections: sectionsToForm(sections, show_default_sections === true),
       };
     }),
   };
@@ -443,7 +475,7 @@ export function fromForm(form, original) {
     if (show_default_sections === true) o.show_default_sections = true;
     if (show_other_devices === false) o.show_other_devices = false;
     if (show_automations === false) o.show_automations = false;
-    const list = (Array.isArray(sections) ? sections : []).map(formToSection);
+    const list = withoutDefaultOrder((Array.isArray(sections) ? sections : []).map(formToSection));
     if (list.length) o.sections = list;
     // An area without sections and with default options needs no override
     if (Object.keys(o).length) overrides[area] = o;
