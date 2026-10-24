@@ -373,8 +373,9 @@ power plugs of TV, receiver and speakers.
           hidden: true                 # any section, own or default, can be hidden
 ```
 
-Standard categories the list does not name come first. A **hidden** section shows nothing and
-selects nothing: its entities appear with the remaining devices.
+Standard categories the list does not name come first; without `show_default_sections` the `default`
+entries are ignored (the editor removes them when the option is switched off). A **hidden** section
+shows nothing and selects nothing: its entities appear with the remaining devices.
 
 - An **entity** is shown only once, in the first section that selects it (`match` and `entities`).
   The configured sections select first, the standard categories take what is left. Other entities of

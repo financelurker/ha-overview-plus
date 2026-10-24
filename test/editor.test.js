@@ -716,11 +716,10 @@ test("default sections: appear in the list of sections, can be moved and hidden,
   assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.title), ["A", "B"]);
   assert.equal(summary(panel), "Ground › Living room2 sections · with default sections", "only own sections are counted");
 
-  // "Scenes" down, below "A": now the order is written
+  // "Scenes" down, below "A": only what differs from the default place is written
   const scenes = panel.querySelector('.sections > [data-default="scenes"]');
   click(buttons(scenes, "Move down")[0]);
-  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.default || s.title),
-    ["light", "climate", "security", "media_players", "A", "scenes", "B"]);
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.default || s.title), ["A", "scenes", "B"]);
   // hide "Climate": a switch, no delete button, not expandable
   const climate = panel.querySelector('.sections > [data-default="climate"]');
   assert.equal(climate.localName, "div");
@@ -728,7 +727,9 @@ test("default sections: appear in the list of sections, can be moved and hidden,
   const toggle = climate.querySelector("input[type=checkbox]");
   toggle.checked = false;
   toggle.dispatchEvent(new Event("change"));
-  assert.deepEqual(last().area_overrides.living_room.sections[1], { default: "climate", hidden: true });
+  assert.deepEqual(last().area_overrides.living_room.sections.find((s) => s.default === "climate"), { default: "climate", hidden: true });
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.default || s.title), ["climate", "security", "media_players", "A", "scenes", "B"],
+    "lights first need no entry");
 
   // switched off: the standard categories leave the list
   edit(formWith(panel, "show_default_sections"), { show_default_sections: false });

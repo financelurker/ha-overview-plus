@@ -1367,11 +1367,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
       const number = own++;
       const { header, secondary } = this._sectionHeader(section, number);
-      const toggle = this._visibleToggle(section, header, () => {
+      /** Header text, and the name of the switch for screen readers */
+      const refresh = () => {
         const h = this._sectionHeader(section, number);
         panel.setHeader(h.header, h.secondary);
+        toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${h.header}`);
         panel.root.classList.toggle("off", !!section.hidden);
-      });
+      };
+      const toggle = this._visibleToggle(section, header, () => refresh());
       const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
         if (isOpen) open.add(index);
         else open.delete(index);
@@ -1387,8 +1390,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         if (hidden) section.hidden = true;
         else delete section.hidden;
         if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
-        const h = this._sectionHeader(section, number);
-        panel.setHeader(h.header, h.secondary);
+        refresh();
         this._emit();
       });
 

@@ -174,23 +174,39 @@ function sectionToForm(section) {
  * @param {boolean} withDefaults
  */
 function sectionsToForm(sections, withDefaults) {
-  const list = (Array.isArray(sections) ? sections : []).filter((s) => !isPlainObject(s) || !s.default || (withDefaults && DEFAULT_SECTIONS.includes(s.default)));
+  // Standard categories: only with the option, only known ones, each once (the first entry counts)
+  const seen = new Set();
+  const list = (Array.isArray(sections) ? sections : []).filter((s) => {
+    if (!isPlainObject(s) || !s.default) return true;
+    if (!withDefaults || !DEFAULT_SECTIONS.includes(s.default) || seen.has(s.default)) return false;
+    seen.add(s.default);
+    return true;
+  });
   const placed = new Set(list.filter((s) => isPlainObject(s) && s.default).map((s) => s.default));
   const missing = withDefaults ? DEFAULT_SECTIONS.filter((key) => !placed.has(key)).map((key) => ({ default: key })) : [];
   return [...missing, ...list].map(sectionToForm);
 }
 
 /**
- * The standard categories in their default place (first, default order, none hidden) need
- * no entries: the area view puts them there anyway. Keeps the configuration short.
+ * Leading standard categories that the area view would put there anyway need no entries:
+ * categories the list does not name come first, in default order. An entry is dropped
+ * only while that keeps the order the same (and it is not hidden). Keeps the
+ * configuration short.
  * @param {Record<string, any>[]} list
  */
 function withoutDefaultOrder(list) {
-  const defaults = list.filter((s) => s.default);
-  const leading = list.slice(0, DEFAULT_SECTIONS.length);
-  const isDefaultPlace = defaults.length === DEFAULT_SECTIONS.length &&
-    leading.every((s, i) => s.default === DEFAULT_SECTIONS[i] && s.hidden !== true);
-  return isDefaultPlace ? list.slice(DEFAULT_SECTIONS.length) : list;
+  const named = new Set(list.filter((s) => s.default).map((s) => s.default));
+  const unnamed = DEFAULT_SECTIONS.filter((key) => !named.has(key));
+  let start = 0;
+  for (const entry of list) {
+    const pos = DEFAULT_SECTIONS.indexOf(entry.default);
+    if (!entry.default || entry.hidden === true || pos < 0) break;
+    // all categories already placed by the view must come before this one
+    if (unnamed.some((key) => DEFAULT_SECTIONS.indexOf(key) > pos)) break;
+    unnamed.push(entry.default);
+    start++;
+  }
+  return list.slice(start);
 }
 
 /** @param {Record<string, any>} form */
@@ -200,11 +216,11 @@ function formToSection(form) {
   // A standard category placed in the list: only its key and whether it is hidden
   if (rest.default) return { default: rest.default, ...(hidden === true ? { hidden: true } : {}) };
   return dropEmpty({
-    ...(hidden === true ? { hidden: true } : {}),
     ...rest,
     match: fieldsToMatch(form || {}),
     entities: fieldsToEntities(form || {}),
     primary: fieldsToPrimary(form || {}),
+    ...(hidden === true ? { hidden: true } : {}),
   });
 }
 

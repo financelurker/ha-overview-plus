@@ -339,7 +339,11 @@ export function generateAreaView(hass, areaId, options = {}) {
   const showCategories = !hasOverride || withDefaults;
   if (showCategories) {
     /** @type {Set<string>} */
-    const hiddenKeys = new Set(withDefaults ? configured.filter((s) => s.default && s.hidden === true).map((s) => String(s.default)) : []);
+    // The first entry of a category counts, as for the order
+    /** @type {Map<string, any>} */
+    const firstEntry = new Map();
+    for (const s of configured) if (s.default && !firstEntry.has(String(s.default))) firstEntry.set(String(s.default), s);
+    const hiddenKeys = new Set(withDefaults ? [...firstEntry].filter(([, s]) => s.hidden === true).map(([key]) => key) : []);
     const free = all.filter((ctx) => !consumed.has(ctx.entity_id));
     const bySummary = Object.fromEntries(
       Object.entries(SUMMARY_FILTERS).map(([key, filters]) => [key, hiddenKeys.has(key) ? [] : findEntities(free, filters)])

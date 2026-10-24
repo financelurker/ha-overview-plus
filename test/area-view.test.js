@@ -364,3 +364,9 @@ test("without show_default_sections, default entries in the list are ignored", (
   const plain = generateAreaView(makeHass(), "living_room", { override: { sections: [{ default: "light", hidden: true }] } }).view;
   assert.equal(headings(plain)[0], "Lights");
 });
+
+test("the first entry of a default section counts, as in the editor", () => {
+  const sections = [MULTIMEDIA, { default: "light" }, { default: "light", hidden: true }];
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
+  assert.ok(headings(view).includes("Lights"));
+});
