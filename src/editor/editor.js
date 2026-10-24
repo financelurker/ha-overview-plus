@@ -205,6 +205,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
      * @type {Set<string>}
      */
     this._openTop = new Set();
+    /**
+     * Build the content of collapsible parts only when they are expanded the first time.
+     * Off in tests that need every field without expanding.
+     */
+    this._lazy = true;
+    /** @type {Set<string>} top-level parts whose content is built */
+    this._builtTop = new Set();
     /** Ids for the texts of inline confirmations */
     this._confirmCount = 0;
     /** @type {Record<string, (header: string, secondary: string) => void>} */
@@ -224,6 +231,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    // A detached editor (not yet added, or closed) builds itself when it is added
+    if (!this.isConnected) return;
     if (first || !this._built) this._renderAll();
     else this._updateHass();
   }
@@ -249,11 +258,23 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     if (ids.size === 1) this._openAreas.add([...ids][0]);
     this._openSections = new Map();
     this._openRules = new Set([...this._openRules].filter((i) => i < this._form.rules.length));
-    this._renderAll();
+    if (this.isConnected) this._renderAll();
+    else this._built = false; // built when it is added
   }
 
   connectedCallback() {
     if (!this._built) this._renderAll();
+  }
+
+  disconnectedCallback() {
+    // Home Assistant may keep a closed editor around: drop its forms, so it stays light.
+    // Added again, it builds itself anew (the configuration and open parts are kept).
+    this.shadowRoot?.replaceChildren();
+    this._parts = {};
+    this._builtTop = new Set();
+    this._topHeaders = {};
+    this._subHeaders = {};
+    this._built = false;
   }
 
   // ------------------------------------------------------------------ helpers
@@ -518,8 +539,30 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {boolean} expanded
    * @param {(expanded: boolean) => void} onToggle
    * @param {{ leading?: HTMLElement, icons?: HTMLElement[] }} [extras] icon before the header, controls after it
+   * @returns {{ root: HTMLElement, body: HTMLElement, setHeader: (h: string, s: string) => void, content: (build: (body: HTMLElement) => void) => void }}
+   *   `content(build)`: builds the body now if the panel is expanded (or lazy building is
+   *   off), otherwise when it is expanded the first time – a large configuration opens fast.
    */
   _panel(header, secondary, expanded, onToggle, extras = {}) {
+    /** @type {((body: HTMLElement) => void) | undefined} */
+    let builder;
+    let built = false;
+    /** @type {HTMLElement} */
+    let bodyEl;
+    const ensure = () => {
+      if (built || !builder) return;
+      built = true;
+      try {
+        builder(bodyEl);
+      } catch (err) {
+        console.error("[overview-plus] editor part could not be built.", err);
+      }
+    };
+    /** @param {boolean} isOpen @param {(body: HTMLElement) => void} build */
+    const content = (isOpen, build) => {
+      builder = build;
+      if (isOpen || !this._lazy) ensure();
+    };
     if (customElements.get("ha-expansion-panel")) {
       const panel = /** @type {any} */ (document.createElement("ha-expansion-panel"));
       panel.header = header;
@@ -527,8 +570,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       panel.expanded = expanded;
       panel.outlined = true;
       // expanded-changed bubbles: react only to this panel, not to panels nested inside it
+      // Build before Home Assistant measures the content for the expand animation …
+      panel.addEventListener("expanded-will-change", (/** @type {any} */ ev) => {
+        if (ev.target === panel && ev.detail?.expanded) ensure();
+      });
       panel.addEventListener("expanded-changed", (/** @type {any} */ ev) => {
-        if (ev.target === panel) onToggle(ev.detail.expanded);
+        if (ev.target !== panel) return;
+        if (ev.detail.expanded) ensure(); // … and in any case once it is expanded
+        onToggle(ev.detail.expanded);
       });
       if (extras.leading) {
         extras.leading.slot = "leading-icon";
@@ -541,11 +590,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const body = document.createElement("div");
       body.className = "panel-body";
       panel.appendChild(body);
+      bodyEl = body;
       return {
         root: panel,
         body,
         /** @param {string} h @param {string} s */
         setHeader: (h, s) => { panel.header = h; panel.secondary = s; },
+        content: (build) => content(!!panel.expanded, build),
       };
     }
     const details = document.createElement("details");
@@ -566,10 +617,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       row.append(...extras.icons);
       body.append(row);
     }
-    details.addEventListener("toggle", () => onToggle(details.open));
+    bodyEl = body;
+    details.addEventListener("toggle", () => {
+      if (details.open) ensure();
+      onToggle(details.open);
+    });
     const setHeader = (/** @type {string} */ h, /** @type {string} */ s) => { title.textContent = h; sub.textContent = s; };
     setHeader(header, secondary);
-    return { root: details, body, setHeader };
+    return { root: details, body, setHeader, content: (build) => content(details.open, build) };
   }
 
   // -------------------------------------------------------------- state & emit
@@ -607,7 +662,9 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     style.textContent = STYLE;
     root.appendChild(style);
 
-    // Three collapsible parts; collapsed when the editor opens unless opened before
+    // Three collapsible parts; collapsed when the editor opens unless opened before.
+    // Their content is built when they are expanded the first time.
+    this._builtTop = new Set();
     const homePanel = this._topPanel("home");
     const areaPanel = this._topPanel("areas");
     const generalPanel = this._topPanel("general");
@@ -616,12 +673,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const homeBlock = document.createElement("div");
     homeBlock.className = "block home";
     this._parts.home = homeBlock;
-    homePanel.body.append(homeBlock);
 
     // ---- Area layouts: one block per customized area
     const areaBlock = document.createElement("div");
     areaBlock.className = "block areas-block";
-    areaPanel.body.append(areaBlock);
     areaBlock.append(this._hint("editor_areas_help"));
     this._parts.areas = document.createElement("div");
     this._parts.areas.className = "areas list";
@@ -632,7 +687,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     // ---- General: card rules and options for the whole dashboard
     const generalBlock = document.createElement("div");
     generalBlock.className = "block general";
-    generalPanel.body.append(generalBlock);
     this._parts.rules = document.createElement("div");
     this._parts.rules.className = "rules list";
     const ruleActions = document.createElement("div");
@@ -666,9 +720,21 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
     root.append(homePanel.root, areaPanel.root, generalPanel.root);
     this._built = true;
-    this._renderHome();
-    this._renderAreas();
-    this._renderRules();
+    homePanel.content((body) => {
+      body.append(homeBlock);
+      this._builtTop.add("home");
+      this._renderHome();
+    });
+    areaPanel.content((body) => {
+      body.append(areaBlock);
+      this._builtTop.add("areas");
+      this._renderAreas();
+    });
+    generalPanel.content((body) => {
+      body.append(generalBlock);
+      this._builtTop.add("general");
+      this._renderRules();
+    });
     this._refreshTopHeaders();
   }
 
@@ -764,7 +830,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   _renderHome() {
     const block = this._parts.home;
-    if (!block) return;
+    if (!block || !this._builtTop.has("home")) return;
     block.innerHTML = "";
     const own = this._form.load_home_settings === false;
     const home = this._form.home;
@@ -791,10 +857,12 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const list = document.createElement("div");
       list.className = "list home-items";
       const pages = this._subPanel("summaries", "editor_summary_pages");
-      pages.body.append(this._hint("editor_summary_pages_help"), list);
       block.append(hint, pages.root);
-      // Order and visibility come from the built-in Overview; only the pages are set here
-      for (const key of SUMMARY_PAGE_KEYS) list.append(this._summaryPanel({ type: "summary", key }));
+      pages.content((body) => {
+        body.append(this._hint("editor_summary_pages_help"), list);
+        // Order and visibility come from the built-in Overview; only the pages are set here
+        for (const key of SUMMARY_PAGE_KEYS) list.append(this._summaryPanel({ type: "summary", key }));
+      });
       this._renderIndicatorBlock(block);
       this._refreshTopHeaders();
       return;
@@ -834,21 +902,23 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const summaries = this._subPanel("summaries", "editor_summaries");
     const list = document.createElement("div");
     list.className = "list home-items";
-    summaries.body.append(this._hint("editor_summaries_help"), list);
     block.append(summaries.root);
-    this._renderHomeItems(list);
+    summaries.content((body) => {
+      body.append(this._hint("editor_summaries_help"), list);
+      this._renderHomeItems(list);
 
-    const actions = document.createElement("div");
-    actions.className = "row left home-actions";
-    actions.append(
-      this._button(this._t("editor_add_shortcut"), () => {
-        home.items.push({ type: "custom", path: "" });
-        this._openShortcuts.add(home.items.length - 1);
-        this._renderHomeItems(list);
-        // nothing to emit yet: a shortcut without path is not saved
-      })
-    );
-    summaries.body.append(actions);
+      const actions = document.createElement("div");
+      actions.className = "row left home-actions";
+      actions.append(
+        this._button(this._t("editor_add_shortcut"), () => {
+          home.items.push({ type: "custom", path: "" });
+          this._openShortcuts.add(home.items.length - 1);
+          this._renderHomeItems(list);
+          // nothing to emit yet: a shortcut without path is not saved
+        })
+      );
+      body.append(actions);
+    });
     this._renderIndicatorBlock(block);
     this._refreshTopHeaders();
   }
@@ -878,9 +948,11 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const list = document.createElement("div");
     list.className = "list indicator-items";
     const panel = this._subPanel("indicators", "editor_indicators");
-    panel.body.append(this._hint("editor_indicators_help"), list);
     block.append(panel.root);
-    this._renderIndicatorItems(list);
+    panel.content((body) => {
+      body.append(this._hint("editor_indicators_help"), list);
+      this._renderIndicatorItems(list);
+    });
   }
 
   /** @param {HTMLElement} list */
@@ -1149,6 +1221,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   _renderAreas() {
     const container = this._parts.areas;
+    if (!container || !this._builtTop.has("areas")) return;
     container.innerHTML = "";
     if (!this._form.areas.length) container.append(this._hint("editor_no_area"));
     for (const entry of this._form.areas) container.appendChild(this._renderAreaPanel(entry));
@@ -1207,7 +1280,17 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     }, { icons: this._moveButtons(index, areas.length, move, (i) => this._parts.areas?.querySelectorAll(":scope > .area-panel")[i]) });
     panel.root.classList.add("area-panel");
     const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
+    panel.content((body) => this._buildAreaPanel(entry, body, refreshHeader));
+    return panel.root;
+  }
 
+  /**
+   * Content of an area layout block: options, sections, actions.
+   * @param {any} entry
+   * @param {HTMLElement} body
+   * @param {() => void} refreshHeader
+   */
+  _buildAreaPanel(entry, body, refreshHeader) {
     const sections = document.createElement("div");
     sections.className = "sections list";
     const renderSections = () => this._renderSections(entry, sections, refreshHeader);
@@ -1237,9 +1320,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       }, "plain", "danger")
     );
 
-    panel.body.append(options, sections, actions);
+    body.append(options, sections, actions);
     renderSections();
-    return panel.root;
   }
 
   /**
@@ -1304,28 +1386,30 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       else this._openTiles.delete(entry.area);
     });
     tile.root.classList.add("tile-panel");
-    tile.body.append(form([
-      { name: "", type: "grid", schema: [
-        { name: "t_name", selector: { text: {} } },
-        { name: "t_color", selector: { ui_color: {} } },
-      ] },
-      { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
-      ...(entry.t_sensors === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
-    ], ["t_sensors"]));
-    if (entry.t_sensors === "entities") {
-      tile.body.append(
-        this._entityList("t_entities", entry.t_entities, (list) => {
-          entry.t_entities = list;
-          changed();
-        }),
-        form([{ name: "t_show_names", selector: { boolean: {} } }])
-      );
-    }
-    tile.body.append(form([
-      { name: "t_alert_classes", selector: classes(tileClasses.alert) },
-      { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-    ]));
     container.append(tile.root);
+    tile.content((body) => {
+      body.append(form([
+        { name: "", type: "grid", schema: [
+          { name: "t_name", selector: { text: {} } },
+          { name: "t_color", selector: { ui_color: {} } },
+        ] },
+        { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
+        ...(entry.t_sensors === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
+      ], ["t_sensors"]));
+      if (entry.t_sensors === "entities") {
+        body.append(
+          this._entityList("t_entities", entry.t_entities, (list) => {
+            entry.t_entities = list;
+            changed();
+          }),
+          form([{ name: "t_show_names", selector: { boolean: {} } }])
+        );
+      }
+      body.append(form([
+        { name: "t_alert_classes", selector: classes(tileClasses.alert) },
+        { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
+      ]));
+    });
   }
 
   /** @param {any} section @param {number} index */
@@ -1398,24 +1482,26 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         else open.delete(index);
       }, { leading, icons: [...moves, toggle] });
       panel.root.classList.toggle("off", !!section.hidden);
+      container.appendChild(panel.root);
 
-      const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
-        const before = sectionShape(section);
-        const hidden = section.hidden;
-        const hideRules = section.hide_rules;
-        const sortGroups = section.sort_groups;
-        for (const key of Object.keys(section)) delete section[key];
-        Object.assign(section, v);
-        // shown/hidden is set by the switch in the header, the hide rules by their own rows
-        if (hidden) section.hidden = true;
-        else delete section.hidden;
-        if (hideRules) section.hide_rules = hideRules;
-        else delete section.hide_rules;
-        if (sortGroups) section.sort_groups = sortGroups;
-        else delete section.sort_groups;
-        if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
-        refresh();
-        this._emit();
+      panel.content((body) => {
+        const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
+          const before = sectionShape(section);
+          const hidden = section.hidden;
+          const hideRules = section.hide_rules;
+          const sortGroups = section.sort_groups;
+          for (const key of Object.keys(section)) delete section[key];
+          Object.assign(section, v);
+          // shown/hidden is set by the switch in the header, the hide rules by their own rows
+          if (hidden) section.hidden = true;
+          else delete section.hidden;
+          if (hideRules) section.hide_rules = hideRules;
+          else delete section.hide_rules;
+          if (sortGroups) section.sort_groups = sortGroups;
+          else delete section.sort_groups;
+          if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
+          refresh();
+          this._emit();
       });
 
       const row = document.createElement("div");
@@ -1428,8 +1514,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         refreshAreaHeader();
         this._emit();
       }));
-      panel.body.append(form, this._groupRowsBlock(section, "hide"), this._groupRowsBlock(section, "sort"), row);
-      container.appendChild(panel.root);
+      body.append(form, this._groupRowsBlock(section, "hide"), this._groupRowsBlock(section, "sort"), row);
+      });
     });
   }
 
@@ -1490,19 +1576,20 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const domains = this._opts?.domains || [];
     const deviceClasses = (this._opts?.deviceClasses || []).filter((/** @type {any} */ o) => o.value !== "none");
     // States to suggest: the usual ones and the non-numeric states of the chosen domains
-    /** @type {Map<string, Set<string>>} */
-    const byDomain = new Map();
-    if (hide) {
-      for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
-        const value = String(st.state ?? "");
-        if (!value || !Number.isNaN(Number(value))) continue;
-        const domain = String(st.entity_id).split(".")[0];
-        if (!byDomain.has(domain)) byDomain.set(domain, new Set());
-        byDomain.get(domain)?.add(value);
-      }
-    }
+    /** @type {Map<string, Set<string>> | undefined} collected on first use */
+    let byDomain;
     /** @param {string[]} chosen */
     const stateOptions = (chosen) => {
+      if (!byDomain) {
+        byDomain = new Map();
+        for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
+          const value = String(st.state ?? "");
+          if (!value || !Number.isNaN(Number(value))) continue;
+          const domain = String(st.entity_id).split(".")[0];
+          if (!byDomain.has(domain)) byDomain.set(domain, new Set());
+          byDomain.get(domain)?.add(value);
+        }
+      }
       const seen = new Set(["off", "on", "unavailable", "unknown"]);
       for (const domain of chosen) for (const value of byDomain.get(domain) || []) if (seen.size < 40) seen.add(value);
       return [...seen].map((value) => ({ value, label: value }));
@@ -1547,7 +1634,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         list.append(row);
       });
     };
-    render();
     const actions = document.createElement("div");
     actions.className = "row left";
     actions.append(this._button(this._t(k.add), () => {
@@ -1556,7 +1642,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       render();
       // nothing to emit yet: an empty row is not saved
     }));
-    panel.body.append(this._hint(k.help), list, actions);
+    panel.content((body) => {
+      render();
+      body.append(this._hint(k.help), list, actions);
+    });
     return panel.root;
   }
 
@@ -1597,7 +1686,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   _renderRules() {
     const container = this._parts.rules;
-    if (!container) return;
+    if (!container || !this._builtTop.has("general")) return;
     container.innerHTML = "";
     const rules = this._form.rules;
     rules.forEach((/** @type {any} */ rule, /** @type {number} */ index) => {
@@ -1620,14 +1709,16 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         if (open) this._openRules.add(index);
         else this._openRules.delete(index);
       }, { icons: moves });
-      const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
-        const before = ruleShape(rule);
-        for (const key of Object.keys(rule)) delete rule[key];
-        Object.assign(rule, v);
-        if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
-        const h = this._ruleHeader(rule, index);
-        panel.setHeader(h.header, h.secondary);
-        this._emit();
+      container.appendChild(panel.root);
+      panel.content((body) => {
+        const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
+          const before = ruleShape(rule);
+          for (const key of Object.keys(rule)) delete rule[key];
+          Object.assign(rule, v);
+          if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
+          const h = this._ruleHeader(rule, index);
+          panel.setHeader(h.header, h.secondary);
+          this._emit();
       });
       const row = document.createElement("div");
       row.className = "row";
@@ -1637,8 +1728,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._renderRules();
         this._emit();
       }));
-      panel.body.append(form, row);
-      container.appendChild(panel.root);
+      body.append(form, row);
+      });
     });
   }
 }
