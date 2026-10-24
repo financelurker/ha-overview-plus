@@ -451,3 +451,20 @@ test("hide_states short form: a list of states for every entity; nothing set: no
   const none = generateAreaView(makeHass(), "living_room", { override: { sections: [MULTIMEDIA] } }).view;
   assert.ok(none.sections.every((s) => !s.visibility && s.cards.every((c) => !c.visibility)));
 });
+
+test("hide_states: only entities that have a card decide; plain states mixed with rules apply to all", () => {
+  // a card rule hides the switch: the section depends on the TV only
+  const rules = [{ match: { entity: "switch.plug" }, card: false }];
+  const sections = [{ title: "M", match: { entity: ["media_player.tv", "switch.plug"] }, entities: { hide_states: [{ domain: "media_player", states: ["off"] }] } }];
+  const { view } = generateAreaView(makeHass(), "living_room", { card_rules: rules, override: { sections } });
+  assert.deepEqual(view.sections[0].visibility, [{ condition: "state", entity: "media_player.tv", state_not: ["off"] }]);
+  // existing visibility of a card rule (also a single object) is kept
+  const vis = { condition: "screen", media_query: "(min-width: 0px)" };
+  const kept = generateAreaView(makeHass(), "living_room", {
+    card_rules: [{ match: { entity: "media_player.tv" }, card: { visibility: vis } }],
+    override: { sections: [{ title: "M", match: { entity: "media_player.tv" }, entities: { hide_states: ["off", { domain: "switch", states: ["on"] }] } }] },
+  }).view;
+  const tv = kept.sections[0].cards[1];
+  assert.equal(tv.visibility.length, 2);
+  assert.deepEqual(tv.visibility[1], { condition: "state", entity: "media_player.tv", state_not: ["off"] });
+});

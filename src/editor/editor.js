@@ -1471,33 +1471,39 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     };
     const domains = this._opts?.domains || [];
     const deviceClasses = (this._opts?.deviceClasses || []).filter((/** @type {any} */ o) => o.value !== "none");
-    /** States to suggest: the usual ones and those of the domain in this installation. @param {string} domain */
-    const stateOptions = (domain) => {
+    // States to suggest: the usual ones and the non-numeric states of the chosen domains
+    /** @type {Map<string, Set<string>>} */
+    const byDomain = new Map();
+    for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
+      const value = String(st.state ?? "");
+      if (!value || !Number.isNaN(Number(value))) continue;
+      const domain = String(st.entity_id).split(".")[0];
+      if (!byDomain.has(domain)) byDomain.set(domain, new Set());
+      byDomain.get(domain)?.add(value);
+    }
+    /** @param {string[]} domains */
+    const stateOptions = (domains) => {
       const seen = new Set(["off", "on", "unavailable", "unknown"]);
-      for (const st of Object.values(this._hass?.states || {})) {
-        if (seen.size >= 24) break;
-        if (domain && !String(/** @type {any} */ (st).entity_id).startsWith(`${domain}.`)) continue;
-        if (/** @type {any} */ (st).state) seen.add(String(/** @type {any} */ (st).state));
-      }
+      for (const domain of domains) for (const value of byDomain.get(domain) || []) if (seen.size < 40) seen.add(value);
       return [...seen].map((value) => ({ value, label: value }));
     };
     /** @param {any} rule */
     const schema = (rule) => [
       { name: "", type: "grid", schema: [
-        { name: "hr_domain", selector: { select: { mode: "dropdown", custom_value: true, options: domains } } },
-        { name: "hr_device_class", selector: { select: { mode: "dropdown", custom_value: true, options: deviceClasses } } },
+        { name: "hr_domain", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: domains } } },
+        { name: "hr_device_class", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: deviceClasses } } },
       ] },
-      { name: "hr_states", required: true, selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: stateOptions(rule.domain) } } },
+      { name: "hr_states", required: true, selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: stateOptions(rule.domain || []) } } },
     ];
     const render = () => {
       list.replaceChildren();
       rules.forEach((rule, index) => {
         const row = document.createElement("div");
         row.className = "hide-rule";
-        const form = this._haForm(schema(rule), { hr_domain: rule.domain || "", hr_device_class: rule.device_class || "", hr_states: rule.states || [] }, (v) => {
-          const domainChanged = (v.hr_domain || "") !== (rule.domain || "");
-          rule.domain = v.hr_domain || "";
-          rule.device_class = v.hr_device_class || "";
+        const form = this._haForm(schema(rule), { hr_domain: rule.domain || [], hr_device_class: rule.device_class || [], hr_states: rule.states || [] }, (v) => {
+          const domainChanged = JSON.stringify(v.hr_domain || []) !== JSON.stringify(rule.domain || []);
+          rule.domain = (v.hr_domain || []).filter(Boolean);
+          rule.device_class = (v.hr_device_class || []).filter(Boolean);
           rule.states = (v.hr_states || []).filter(Boolean);
           if (domainChanged) form.schema = schema(rule);
           changed();
@@ -1516,7 +1522,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const actions = document.createElement("div");
     actions.className = "row left";
     actions.append(this._button(this._t("editor_add_hide_rule"), () => {
-      rules.push({ domain: "", device_class: "", states: [] });
+      rules.push({ domain: [], device_class: [], states: [] });
       this._openHideRules.add(section);
       render();
       // nothing to emit yet: a rule without states is not saved

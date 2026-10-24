@@ -237,18 +237,19 @@ const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v
  */
 export function hideRulesOf(sel) {
   const raw = asList(sel?.hide_states);
-  if (raw.every((r) => typeof r !== "object" || r === null)) {
-    const states = raw.map(stateText).filter(Boolean);
-    return states.length ? [{ domains: [], deviceClasses: [], states }] : [];
-  }
-  return raw
-    .filter((r) => r && typeof r === "object" && !Array.isArray(r))
+  const isRule = (/** @type {any} */ r) => r && typeof r === "object" && !Array.isArray(r);
+  // Plain states (also mixed with rules) form one rule for every entity
+  const plain = raw.filter((r) => !isRule(r) && r !== null && r !== undefined).map(stateText).filter(Boolean);
+  return [
+    ...(plain.length ? [{ domains: [], deviceClasses: [], states: plain }] : []),
+    ...raw.filter(isRule)
     .map((r) => ({
       domains: asList(r.domain).map(String),
       deviceClasses: asList(r.device_class).map(String),
       states: asList(r.states ?? r.state).map(stateText).filter(Boolean),
     }))
-    .filter((r) => r.states.length);
+    .filter((r) => r.states.length),
+  ];
 }
 
 /**
@@ -294,7 +295,7 @@ function shownWhile(rules, list) {
 function hideWhile(target, rules, list) {
   const condition = target ? shownWhile(rules, list) : undefined;
   if (!target || !condition) return target;
-  return { ...target, visibility: [...(Array.isArray(target.visibility) ? target.visibility : []), condition] };
+  return { ...target, visibility: [...asList(target.visibility), condition] };
 }
 
 /**
@@ -635,30 +636,38 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
   const hide = (target, list) => hideWhile(target, rules, list);
 
   if (layout === "tiles") {
-    return [hide({ type: "grid", cards: [title, ...compact(shown.map((ctx) => hide(card(factory, ctx), [ctx])))] }, shown)];
+    // only entities that have a card decide whether the section is shown
+    const built = shown.map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
+    return [hide({ type: "grid", cards: [title, ...built.map(([ctx, c]) => hide(c, [ctx]))] }, built.map(([ctx]) => ctx))];
   }
 
   const groups = [...groupByDevice(shown)];
 
   if (layout === "devices") {
-    return [
-      hide({ type: "grid", column_span: 3, cards: [{ ...title, heading_style: "title" }] }, shown),
-      ...groups.flatMap(([deviceId, entities]) => {
-        const device = deviceId ? hass.devices?.[deviceId] : undefined;
-        const custom = device ? factory.device(device, entities) : undefined;
-        if (custom === null) return [];
-        return [hide({
-          type: "grid",
-          cards: [
-            headingCard(device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
-              heading_style: "subtitle",
-              tap_action: deviceTapAction(hass, device),
-            }),
-            ...(custom ? [custom] : compact(entities.map((ctx) => hide(card(factory, ctx, { name: { type: "entity" } }), [ctx])))),
-          ],
-        }, entities)];
-      }),
-    ];
+    /** @type {EntityContext[]} entities that have a card: they decide whether the title is shown */
+    const deciding = [];
+    const blocks = groups.flatMap(([deviceId, entities]) => {
+      const device = deviceId ? hass.devices?.[deviceId] : undefined;
+      const custom = device ? factory.device(device, entities) : undefined;
+      if (custom === null) return [];
+      const built = custom
+        ? [/** @type {[EntityContext[], any]} */ ([entities, custom])]
+        : entities.map((ctx) => /** @type {[EntityContext[], any]} */ ([[ctx], card(factory, ctx, { name: { type: "entity" } })])).filter(([, c]) => c);
+      if (!built.length) return [];
+      const own = built.flatMap(([list]) => list);
+      deciding.push(...own);
+      return [hide({
+        type: "grid",
+        cards: [
+          headingCard(device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
+            heading_style: "subtitle",
+            tap_action: deviceTapAction(hass, device),
+          }),
+          ...built.map(([list, c]) => hide(c, list)),
+        ],
+      }, own)];
+    });
+    return [hide({ type: "grid", column_span: 3, cards: [{ ...title, heading_style: "title" }] }, deciding), ...blocks];
   }
 
   if (layout === "table") {
@@ -689,8 +698,9 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
   const cards = groups.flatMap(([deviceId, entities]) => {
     const device = deviceId ? hass.devices?.[deviceId] : undefined;
     if (!device) {
-      deciding.push(...entities);
-      return entities.map((ctx) => hide(card(factory, ctx), [ctx]));
+      const built = entities.map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
+      deciding.push(...built.map(([ctx]) => ctx));
+      return built.map(([ctx, c]) => hide(c, [ctx]));
     }
     const custom = factory.device(device, entities);
     if (custom !== undefined) {
@@ -699,11 +709,13 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
     }
     const primary = primaryEntity(entities, section.primary);
     if (!primary) return [];
-    deciding.push(primary);
-    return [hide(card(factory, primary, {
+    const tile = card(factory, primary, {
       name: stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device"),
       ...(hass.user?.is_admin ? { tap_action: navigate(`/config/devices/device/${device.id}`) } : {}),
-    }), [primary])];
+    });
+    if (!tile) return [];
+    deciding.push(primary);
+    return [hide(tile, [primary])];
   });
   // the section disappears when none of its cards is left
   return [hide({ type: "grid", cards: [title, ...compact(cards)] }, deciding)];

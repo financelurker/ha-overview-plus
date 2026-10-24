@@ -164,29 +164,33 @@ function fieldsToPrimary(fields) {
  * "Hide while in state" rules of a section as the editor shows them: one row per rule.
  * The short form (a list of states) becomes one rule for every domain.
  * @param {any} hide
- * @returns {{ domain: string, device_class: string, states: string[] }[]}
+ * @returns {{ domain: string[], device_class: string[], states: string[] }[]}
  */
 function hideRulesToForm(hide) {
   const list = /** @type {any[]} */ (toList(hide));
   /** @param {any} v */
   const text = (v) => (v === true ? "on" : v === false ? "off" : String(v));
-  if (list.every((r) => !isPlainObject(r))) {
-    const states = list.map(text).filter(Boolean);
-    return states.length ? [{ domain: "", device_class: "", states }] : [];
-  }
-  return list.filter(isPlainObject).map((r) => ({
-    domain: toList(r.domain).map(String)[0] ?? "",
-    device_class: toList(r.device_class).map(String)[0] ?? "",
-    states: toList(r.states ?? r.state).map(text).filter(Boolean),
-  }));
+  // Plain states (also mixed with rules) are one rule for every entity, as in the area view
+  const plain = list.filter((r) => !isPlainObject(r) && r !== null && r !== undefined).map(text).filter(Boolean);
+  return [
+    ...(plain.length ? [{ domain: [], device_class: [], states: plain }] : []),
+    ...list.filter(isPlainObject).map((r) => ({
+      domain: toList(r.domain).map(String),
+      device_class: toList(r.device_class).map(String),
+      states: toList(r.states ?? r.state).map(text).filter(Boolean),
+    })),
+  ];
 }
 
-/** @param {any} rules @returns {Record<string, any>[] | undefined} */
+/** @param {any} rules @returns {Record<string, any>[] | string[] | undefined} */
 function hideRulesFromForm(rules) {
   const out = (Array.isArray(rules) ? rules : [])
-    .map((r) => dropEmpty({ domain: r?.domain || undefined, device_class: r?.device_class || undefined, states: (r?.states || []).filter(Boolean) }))
+    .map((r) => dropEmpty({ domain: fromList(toList(r?.domain).filter(Boolean)), device_class: fromList(toList(r?.device_class).filter(Boolean)), states: toList(r?.states).filter(Boolean) }))
     .filter((r) => r.states?.length);
-  return out.length ? out : undefined;
+  if (!out.length) return undefined;
+  // One rule for every entity: the short form, a plain list of states
+  if (out.length === 1 && !out[0].domain && !out[0].device_class) return out[0].states;
+  return out;
 }
 
 /** @param {any} section */
@@ -246,7 +250,7 @@ function withoutDefaultOrder(list) {
 
 /**
  * @param {any} entities entity filter from the form fields (or YAML)
- * @param {Record<string, any>[] | undefined} rules
+ * @param {Record<string, any>[] | string[] | undefined} rules
  */
 function withHideRules(entities, rules) {
   if (!rules) return entities;

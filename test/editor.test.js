@@ -783,7 +783,7 @@ test("hide while in state: conditions per section with domain, optional device c
   assert.ok(block, "own block in the expanded section");
   click(buttons(block, "Add condition")[0]);
   const form = formWith(block, "hr_states");
-  edit(form, { hr_domain: "binary_sensor", hr_device_class: "occupancy", hr_states: ["off"] });
+  edit(form, { hr_domain: ["binary_sensor"], hr_device_class: ["occupancy"], hr_states: ["off"] });
   assert.deepEqual(last().area_overrides.living_room.sections[0].entities, { hide_states: [{ domain: "binary_sensor", device_class: "occupancy", states: ["off"] }] });
   assert.match(summary(block), /1 condition/);
   // editing the section form keeps the conditions
