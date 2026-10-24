@@ -234,6 +234,8 @@ function groupByDevice(entities) {
  */
 export function sortEntities(list, groups) {
   const rules = asList(groups)
+    // a plain string is a domain: `sort: [light, switch]`
+    .map((g) => (typeof g === "string" ? { domain: g } : g))
     .filter((g) => g && typeof g === "object" && !Array.isArray(g))
     .map((g) => ({ domains: asList(g.domain).map(String), deviceClasses: asList(g.device_class).map(String) }))
     .filter((g) => g.domains.length || g.deviceClasses.length);
@@ -680,7 +682,9 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
   }
 
   // Devices in the default order, the entities of each device in the section's order
-  const groups = [...groupByDevice(shown)].map(([id, list]) => /** @type {[string, EntityContext[]]} */ ([id, sortEntities(list, section.sort)]));
+  // (compact shows one entity per device: its choice must not depend on the order)
+  const groups = [...groupByDevice(shown)].map(([id, list]) =>
+    /** @type {[string, EntityContext[]]} */ ([id, layout === "compact" ? list : sortEntities(list, section.sort)]));
 
   if (layout === "devices") {
     /** @type {EntityContext[]} entities that have a card: they decide whether the title is shown */

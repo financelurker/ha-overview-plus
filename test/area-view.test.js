@@ -492,3 +492,13 @@ test("sort in grouped layouts: devices keep the default order, entities within a
   assert.deepEqual(devices.sections.slice(1, 3).map((s) => s.cards[0].heading), ["web", "db"], "device order unchanged");
   assert.equal(devices.sections[1].cards[1].entity, "sensor.vm_web_cpu", "within the device: sensors first");
 });
+
+test("sort: device-class-only groups, plain strings as domains; compact keeps its primary entity", () => {
+  const match = { entity: ["light.ceiling", "sensor.living_temp", "sensor.living_hum", "switch.plug"] };
+  const ids = (sort) => generateAreaView(makeHass(), "living_room", { override: { sections: [{ title: "S", match, sort }] } })
+    .view.sections[0].cards.slice(1).map((c) => c.entity);
+  assert.deepEqual(ids([{ device_class: "humidity" }, "switch"]), ["sensor.living_hum", "switch.plug", "light.ceiling", "sensor.living_temp"]);
+  const compact = (sort) => generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match: { label: "virt-guest" }, layout: "compact", sort }] } })
+    .view.sections[0].cards.slice(1).map((c) => c.entity);
+  assert.deepEqual(compact([{ domain: "sensor" }]), compact(undefined), "the device tile shows the same entity");
+});

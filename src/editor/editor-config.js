@@ -189,7 +189,7 @@ function hideRulesToForm(hide) {
  * @returns {{ domain: string[], device_class: string[] }[]}
  */
 function sortToForm(sort) {
-  return /** @type {any[]} */ (toList(sort)).filter(isPlainObject).map((g) => ({
+  return /** @type {any[]} */ (toList(sort)).map((g) => (typeof g === "string" ? { domain: g } : g)).filter(isPlainObject).map((g) => ({
     domain: toList(g.domain).map(String),
     device_class: toList(g.device_class).map(String),
   }));

@@ -285,3 +285,8 @@ test("sort groups: editor rows and back, lists kept, empty groups not written", 
   form.areas[0].sections[0].sort_groups = [{ domain: [], device_class: [] }];
   assert.equal(fromForm(form, cfg).area_overrides.r.sections[0].sort, undefined);
 });
+
+test("sort groups: a plain string is a domain", () => {
+  const cfg = { type: "x", area_overrides: { r: { sections: [{ title: "A", match: { label: "a" }, sort: ["light", { device_class: "humidity" }] }] } } };
+  assert.deepEqual(fromForm(toForm(cfg), cfg).area_overrides.r.sections[0].sort, [{ domain: "light" }, { device_class: "humidity" }]);
+});
