@@ -86,6 +86,7 @@ const STYLE = `
   .delete-icon { color: var(--error-color, #db4437); }
   .col-empty { display: inline-block; width: 48px; height: 1px; flex: none; }
   .section-icon { display: inline-block; min-width: 24px; min-height: 24px; }
+  .off .section-icon { opacity: 0.5; }
   .item-row .secondary { display: block; font-size: 12px; font-weight: normal; color: var(--secondary-text-color); }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
     border-radius: var(--ha-border-radius-md, 12px); background: color-mix(in srgb, var(--error-color, #db4437) 8%, transparent); }
@@ -1372,10 +1373,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       // The section's icon in front, as for the default sections (empty space without one)
       const leading = /** @type {any} */ (document.createElement("ha-icon"));
       leading.className = "summary-icon section-icon";
-      const setIcon = () => {
-        if (section.icon) leading.icon = section.icon;
-        else leading.icon = undefined;
-      };
+      leading.setAttribute("aria-hidden", "true");
+      const setIcon = () => (leading.icon = section.icon || undefined);
       setIcon();
       /** Header text, and the name of the switch for screen readers */
       const refresh = () => {
