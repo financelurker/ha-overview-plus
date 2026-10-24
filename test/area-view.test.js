@@ -383,6 +383,11 @@ test("table layout: rows without area and device name, as under the device's tit
   const view = generateAreaView(hass, "proxmox", TABLE).view;
   assert.equal(view.sections[0].cards[1].title, "pve1");
   assert.deepEqual(rows(view).slice(0, 2), [{ entity: "sensor.pve_cpu", name: "CPU" }, { entity: "binary_sensor.pve_status", name: "Status" }]);
+  // the device's main entity (no name of its own) keeps the device name
+  hass.entities["sensor.pve_uptime"].name = null;
+  hass.entities["sensor.pve_uptime"].entity_category = undefined;
+  const main = rows(generateAreaView(hass, "proxmox", TABLE).view).find((r) => (r.entity ?? r) === "sensor.pve_uptime");
+  assert.deepEqual(main, { entity: "sensor.pve_uptime", name: "pve1" }, "nothing of its own to show: the device name without the area");
 
   // only friendly names, e.g. "Storeroom Freezer Sensor Temperature"
   const plain = makeHass();
