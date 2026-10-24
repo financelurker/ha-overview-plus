@@ -229,3 +229,16 @@ test("summary pages: only configured ones are written", () => {
   form.summary_pages = { light: "", climate: "/heat" };
   assert.deepEqual(fromForm(form, {}), { summary_pages: { climate: "/heat" } });
 });
+
+test("default sections: short configurations stay short, the shown order never changes", () => {
+  const A = { title: "A", match: { label: "a" } };
+  const round = (sections) => fromForm(toForm({ type: "x", area_overrides: { r: { show_default_sections: true, sections } } }), {}).area_overrides?.r?.sections;
+  assert.deepEqual(round([A, { default: "climate" }]), [A, { default: "climate" }]);
+  assert.deepEqual(round([{ default: "scenes", hidden: true }]), [{ default: "scenes", hidden: true }]);
+  assert.deepEqual(round([{ default: "light" }, A]), [{ default: "light" }, A], "light after the unnamed ones stays where it is");
+  assert.equal(round([]), undefined);
+  // duplicates and unknown keys: the first entry of a category counts, unknown ones are dropped
+  assert.deepEqual(round([A, { default: "light" }, { default: "light", hidden: true }, { default: "garden" }]), [A, { default: "light" }]);
+  // a hidden own section keeps its key order
+  assert.deepEqual(Object.keys(round([{ ...A, hidden: true }])[0]), ["title", "match", "hidden"]);
+});

@@ -701,3 +701,67 @@ test("Enter and Space on a header arrow move the entry instead of toggling the p
   }
   assert.deepEqual(seen, ["ArrowDown"], "only other keys reach the panel");
 });
+
+const defaultRows = (panel) => [...panel.querySelectorAll(".sections > .default-section")].map((r) => r.dataset.default);
+const sectionEntries = (panel) => [...panel.querySelectorAll(".sections > *")].map((el) => el.dataset.default || summary(el).split(/(?=Tiles|Devices|Compact|Table|Hidden)/)[0]);
+
+test("default sections: appear in the list of sections, can be moved and hidden, disappear when switched off", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  let panel = areaPanel(editor, "Ground › Living room");
+  assert.deepEqual(defaultRows(panel), []);
+  edit(formWith(panel, "show_default_sections"), { show_default_sections: true });
+  panel = areaPanel(editor, "Ground › Living room");
+  assert.deepEqual(sectionEntries(panel), ["light", "climate", "security", "media_players", "scenes", "A", "B"]);
+  // in their default place they need no entries in the configuration
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.title), ["A", "B"]);
+  assert.equal(summary(panel), "Ground › Living room2 sections · with default sections", "only own sections are counted");
+
+  // "Scenes" down, below "A": only what differs from the default place is written
+  const scenes = panel.querySelector('.sections > [data-default="scenes"]');
+  click(buttons(scenes, "Move down")[0]);
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.default || s.title), ["A", "scenes", "B"]);
+  // hide "Climate": a switch, no delete button, not expandable
+  const climate = panel.querySelector('.sections > [data-default="climate"]');
+  assert.equal(climate.localName, "div");
+  assert.equal(buttons(climate, "Delete section").length, 0);
+  const toggle = climate.querySelector("input[type=checkbox]");
+  toggle.checked = false;
+  toggle.dispatchEvent(new Event("change"));
+  assert.deepEqual(last().area_overrides.living_room.sections.find((s) => s.default === "climate"), { default: "climate", hidden: true });
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.default || s.title), ["climate", "security", "media_players", "A", "scenes", "B"],
+    "lights first need no entry");
+
+  // switched off: the standard categories leave the list
+  edit(formWith(panel, "show_default_sections"), { show_default_sections: false });
+  panel = areaPanel(editor, "Ground › Living room");
+  assert.deepEqual(defaultRows(panel), []);
+  assert.deepEqual(last().area_overrides.living_room.sections.map((s) => s.title), ["A", "B"]);
+  assert.equal(last().area_overrides.living_room.show_default_sections, undefined);
+});
+
+test("an own section can be hidden with the switch in its header; editing keeps it hidden", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Ground › Living room");
+  const first = panel.querySelector(".sections > details");
+  const toggle = first.querySelector("input[type=checkbox]");
+  toggle.checked = false;
+  toggle.dispatchEvent(new Event("change"));
+  assert.equal(last().area_overrides.living_room.sections[0].hidden, true);
+  assert.match(summary(first), /Hidden/);
+  edit(sectionForms(first)[0], { title: "A2" });
+  assert.deepEqual(last().area_overrides.living_room.sections[0], { title: "A2", match: { label: "a" }, hidden: true });
+});
+
+test("a configuration with show_default_sections but without entries shows them first; the order is kept as written", () => {
+  const { editor } = setup({ type: "custom:overview-plus", area_overrides: { living_room: { show_default_sections: true, sections: [{ default: "scenes" }, { title: "A", match: { label: "a" } }] } } });
+  assert.deepEqual(sectionEntries(areaPanel(editor, "Ground › Living room")), ["light", "climate", "security", "media_players", "scenes", "A"]);
+  const off = setup({ type: "custom:overview-plus", area_overrides: { living_room: { sections: [{ default: "light" }, { title: "A", match: { label: "a" } }] } } });
+  assert.deepEqual(sectionEntries(areaPanel(off.editor, "Ground › Living room")), ["A"], "without the option: no default entries");
+});
+
+test("rows line up: an empty last column where a row has no switch", () => {
+  const { editor } = setup({ type: "custom:overview-plus", load_home_settings: false, shortcuts: [{ type: "custom", path: "/map", label: "Map" }] });
+  const shortcut = [...root(editor).querySelectorAll(".home-items > details")].find((p) => summary(p).startsWith("Map"));
+  const controls = buttons(shortcut, "Move down")[0].parentElement;
+  assert.ok(controls.lastElementChild.classList.contains("col-empty"));
+});

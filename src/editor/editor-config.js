@@ -23,6 +23,7 @@
  * and the same criteria as exclusions (m_not_*). Primary entity: p_domain, p_device_class (lists).
  */
 
+import { DEFAULT_SECTIONS } from "../views/area-view.js";
 import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
 import { INDICATOR_PRESETS } from "../area-indicators.js";
 
@@ -165,14 +166,61 @@ function sectionToForm(section) {
   return { ...rest, ...matchToFields(match), ...entitiesToFields(entities), ...primaryToFields(primary) };
 }
 
+/**
+ * The list of sections as the editor shows it: with "Show the default sections" the
+ * standard categories are entries of the list – those the configuration does not place
+ * come first, where the area view shows them. Without it there are none.
+ * @param {any} sections
+ * @param {boolean} withDefaults
+ */
+function sectionsToForm(sections, withDefaults) {
+  // Standard categories: only with the option, only known ones, each once (the first entry counts)
+  const seen = new Set();
+  const list = (Array.isArray(sections) ? sections : []).filter((s) => {
+    if (!isPlainObject(s) || !s.default) return true;
+    if (!withDefaults || !DEFAULT_SECTIONS.includes(s.default) || seen.has(s.default)) return false;
+    seen.add(s.default);
+    return true;
+  });
+  const placed = new Set(list.filter((s) => isPlainObject(s) && s.default).map((s) => s.default));
+  const missing = withDefaults ? DEFAULT_SECTIONS.filter((key) => !placed.has(key)).map((key) => ({ default: key })) : [];
+  return [...missing, ...list].map(sectionToForm);
+}
+
+/**
+ * Leading standard categories that the area view would put there anyway need no entries:
+ * categories the list does not name come first, in default order. An entry is dropped
+ * only while that keeps the order the same (and it is not hidden). Keeps the
+ * configuration short.
+ * @param {Record<string, any>[]} list
+ */
+function withoutDefaultOrder(list) {
+  const named = new Set(list.filter((s) => s.default).map((s) => s.default));
+  const unnamed = DEFAULT_SECTIONS.filter((key) => !named.has(key));
+  let start = 0;
+  for (const entry of list) {
+    const pos = DEFAULT_SECTIONS.indexOf(entry.default);
+    if (!entry.default || entry.hidden === true || pos < 0) break;
+    // all categories already placed by the view must come before this one
+    if (unnamed.some((key) => DEFAULT_SECTIONS.indexOf(key) > pos)) break;
+    unnamed.push(entry.default);
+    start++;
+  }
+  return list.slice(start);
+}
+
 /** @param {Record<string, any>} form */
 function formToSection(form) {
-  const rest = withoutPrefix(withoutPrefix(withoutPrefix(form || {}, "m_"), "e_"), "p_");
+  const { hidden, ...fields } = form || {};
+  const rest = withoutPrefix(withoutPrefix(withoutPrefix(fields, "m_"), "e_"), "p_");
+  // A standard category placed in the list: only its key and whether it is hidden
+  if (rest.default) return { default: rest.default, ...(hidden === true ? { hidden: true } : {}) };
   return dropEmpty({
     ...rest,
     match: fieldsToMatch(form || {}),
     entities: fieldsToEntities(form || {}),
     primary: fieldsToPrimary(form || {}),
+    ...(hidden === true ? { hidden: true } : {}),
   });
 }
 
@@ -386,7 +434,7 @@ export function toForm(config) {
         show_default_sections: show_default_sections === true,
         show_other_devices: show_other_devices !== false,
         show_automations: show_automations !== false,
-        sections: (Array.isArray(sections) ? sections : []).map(sectionToForm),
+        sections: sectionsToForm(sections, show_default_sections === true),
       };
     }),
   };
@@ -443,7 +491,7 @@ export function fromForm(form, original) {
     if (show_default_sections === true) o.show_default_sections = true;
     if (show_other_devices === false) o.show_other_devices = false;
     if (show_automations === false) o.show_automations = false;
-    const list = (Array.isArray(sections) ? sections : []).map(formToSection);
+    const list = withoutDefaultOrder((Array.isArray(sections) ? sections : []).map(formToSection));
     if (list.length) o.sections = list;
     // An area without sections and with default options needs no override
     if (Object.keys(o).length) overrides[area] = o;

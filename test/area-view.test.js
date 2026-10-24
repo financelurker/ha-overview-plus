@@ -336,3 +336,37 @@ test("own sections and default sections: automations and lights are not doubled"
   const plain = generateAreaView(makeHass(), "living_room").view;
   assert.deepEqual(plain.sections[0].cards[0].badges[0].tap_action.target, { area_id: "living_room" });
 });
+
+test("default sections can be placed between own sections; missing ones come first", () => {
+  const sections = [{ default: "climate" }, MULTIMEDIA, { default: "light" }];
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
+  // scenes is not named in the list: it comes first; climate, own section, lights as listed
+  assert.deepEqual(headings(view).slice(0, 4), ["Scenes", "Climate", "Multimedia", "Lights"]);
+});
+
+test("a hidden section – default or own – shows nothing; its entities appear with the remaining devices", () => {
+  const sections = [{ default: "climate", hidden: true }, { ...MULTIMEDIA, hidden: true }];
+  const { view, report } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
+  const h = headings(view);
+  assert.ok(!h.includes("Climate") && !h.includes("Multimedia"));
+  assert.ok(h.includes("Radiator"), "the thermostat's device below");
+  assert.ok(h.includes("Coffee machine"), "the plug's device below, as the own section is hidden");
+  assert.ok(h.includes("Media players"), "the TV goes back to its category");
+  assert.deepEqual(report.sections, [], "hidden own sections are not reported");
+  const ids = cards(view).map((c) => c.entity);
+  assert.equal(ids.filter((e) => e === "climate.living").length, 1);
+});
+
+test("without show_default_sections, default entries in the list are ignored", () => {
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { sections: [{ default: "light" }, MULTIMEDIA] } });
+  assert.deepEqual(headings(view).slice(0, 2), ["Multimedia", ""]);
+  // only default entries and no own section: the default view
+  const plain = generateAreaView(makeHass(), "living_room", { override: { sections: [{ default: "light", hidden: true }] } }).view;
+  assert.equal(headings(plain)[0], "Lights");
+});
+
+test("the first entry of a default section counts, as in the editor", () => {
+  const sections = [MULTIMEDIA, { default: "light" }, { default: "light", hidden: true }];
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
+  assert.ok(headings(view).includes("Lights"));
+});
