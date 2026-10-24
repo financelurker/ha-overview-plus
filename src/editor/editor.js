@@ -231,6 +231,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    // A detached editor (not yet added, or closed) builds itself when it is added
+    if (!this.isConnected) return;
     if (first || !this._built) this._renderAll();
     else this._updateHass();
   }
@@ -256,7 +258,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     if (ids.size === 1) this._openAreas.add([...ids][0]);
     this._openSections = new Map();
     this._openRules = new Set([...this._openRules].filter((i) => i < this._form.rules.length));
-    this._renderAll();
+    if (this.isConnected) this._renderAll();
+    else this._built = false; // built when it is added
   }
 
   connectedCallback() {
@@ -269,6 +272,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this.shadowRoot?.replaceChildren();
     this._parts = {};
     this._builtTop = new Set();
+    this._topHeaders = {};
+    this._subHeaders = {};
     this._built = false;
   }
 
@@ -565,9 +570,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       panel.expanded = expanded;
       panel.outlined = true;
       // expanded-changed bubbles: react only to this panel, not to panels nested inside it
+      // Build before Home Assistant measures the content for the expand animation …
+      panel.addEventListener("expanded-will-change", (/** @type {any} */ ev) => {
+        if (ev.target === panel && ev.detail?.expanded) ensure();
+      });
       panel.addEventListener("expanded-changed", (/** @type {any} */ ev) => {
         if (ev.target !== panel) return;
-        if (ev.detail.expanded) ensure();
+        if (ev.detail.expanded) ensure(); // … and in any case once it is expanded
         onToggle(ev.detail.expanded);
       });
       if (extras.leading) {
@@ -895,20 +904,20 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     list.className = "list home-items";
     block.append(summaries.root);
     summaries.content((body) => {
-    body.append(this._hint("editor_summaries_help"), list);
-    this._renderHomeItems(list);
+      body.append(this._hint("editor_summaries_help"), list);
+      this._renderHomeItems(list);
 
-    const actions = document.createElement("div");
-    actions.className = "row left home-actions";
-    actions.append(
-      this._button(this._t("editor_add_shortcut"), () => {
-        home.items.push({ type: "custom", path: "" });
-        this._openShortcuts.add(home.items.length - 1);
-        this._renderHomeItems(list);
-        // nothing to emit yet: a shortcut without path is not saved
-      })
-    );
-    body.append(actions);
+      const actions = document.createElement("div");
+      actions.className = "row left home-actions";
+      actions.append(
+        this._button(this._t("editor_add_shortcut"), () => {
+          home.items.push({ type: "custom", path: "" });
+          this._openShortcuts.add(home.items.length - 1);
+          this._renderHomeItems(list);
+          // nothing to emit yet: a shortcut without path is not saved
+        })
+      );
+      body.append(actions);
     });
     this._renderIndicatorBlock(block);
     this._refreshTopHeaders();
@@ -1379,27 +1388,27 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     tile.root.classList.add("tile-panel");
     container.append(tile.root);
     tile.content((body) => {
-    body.append(form([
-      { name: "", type: "grid", schema: [
-        { name: "t_name", selector: { text: {} } },
-        { name: "t_color", selector: { ui_color: {} } },
-      ] },
-      { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
-      ...(entry.t_sensors === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
-    ], ["t_sensors"]));
-    if (entry.t_sensors === "entities") {
-      body.append(
-        this._entityList("t_entities", entry.t_entities, (list) => {
-          entry.t_entities = list;
-          changed();
-        }),
-        form([{ name: "t_show_names", selector: { boolean: {} } }])
-      );
-    }
-    body.append(form([
-      { name: "t_alert_classes", selector: classes(tileClasses.alert) },
-      { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-    ]));
+      body.append(form([
+        { name: "", type: "grid", schema: [
+          { name: "t_name", selector: { text: {} } },
+          { name: "t_color", selector: { ui_color: {} } },
+        ] },
+        { name: "t_sensors", required: true, selector: { select: { mode: "dropdown", options: sensorModes } } },
+        ...(entry.t_sensors === "custom" ? [{ name: "t_sensor_classes", selector: classes(tileClasses.sensor) }] : []),
+      ], ["t_sensors"]));
+      if (entry.t_sensors === "entities") {
+        body.append(
+          this._entityList("t_entities", entry.t_entities, (list) => {
+            entry.t_entities = list;
+            changed();
+          }),
+          form([{ name: "t_show_names", selector: { boolean: {} } }])
+        );
+      }
+      body.append(form([
+        { name: "t_alert_classes", selector: classes(tileClasses.alert) },
+        { name: "t_alert_entities", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
+      ]));
     });
   }
 
@@ -1476,23 +1485,23 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       container.appendChild(panel.root);
 
       panel.content((body) => {
-      const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
-        const before = sectionShape(section);
-        const hidden = section.hidden;
-        const hideRules = section.hide_rules;
-        const sortGroups = section.sort_groups;
-        for (const key of Object.keys(section)) delete section[key];
-        Object.assign(section, v);
-        // shown/hidden is set by the switch in the header, the hide rules by their own rows
-        if (hidden) section.hidden = true;
-        else delete section.hidden;
-        if (hideRules) section.hide_rules = hideRules;
-        else delete section.hide_rules;
-        if (sortGroups) section.sort_groups = sortGroups;
-        else delete section.sort_groups;
-        if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
-        refresh();
-        this._emit();
+        const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
+          const before = sectionShape(section);
+          const hidden = section.hidden;
+          const hideRules = section.hide_rules;
+          const sortGroups = section.sort_groups;
+          for (const key of Object.keys(section)) delete section[key];
+          Object.assign(section, v);
+          // shown/hidden is set by the switch in the header, the hide rules by their own rows
+          if (hidden) section.hidden = true;
+          else delete section.hidden;
+          if (hideRules) section.hide_rules = hideRules;
+          else delete section.hide_rules;
+          if (sortGroups) section.sort_groups = sortGroups;
+          else delete section.sort_groups;
+          if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
+          refresh();
+          this._emit();
       });
 
       const row = document.createElement("div");
@@ -1702,14 +1711,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       }, { icons: moves });
       container.appendChild(panel.root);
       panel.content((body) => {
-      const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
-        const before = ruleShape(rule);
-        for (const key of Object.keys(rule)) delete rule[key];
-        Object.assign(rule, v);
-        if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
-        const h = this._ruleHeader(rule, index);
-        panel.setHeader(h.header, h.secondary);
-        this._emit();
+        const form = this._haForm(ruleSchema(this._ctx(), this._opts, rule), clone(rule), (v) => {
+          const before = ruleShape(rule);
+          for (const key of Object.keys(rule)) delete rule[key];
+          Object.assign(rule, v);
+          if (ruleShape(rule) !== before) form.schema = ruleSchema(this._ctx(), this._opts, rule);
+          const h = this._ruleHeader(rule, index);
+          panel.setHeader(h.header, h.secondary);
+          this._emit();
       });
       const row = document.createElement("div");
       row.className = "row";
