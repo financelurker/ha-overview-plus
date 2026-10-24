@@ -9,7 +9,8 @@ what the built-in dashboard does not let you change:
 - **Card rules:** show a different card for specific entities or devices, matched by entity, domain,
   integration, label, device, area and more (e.g. a custom thermostat card for all Better Thermostat entities).
 - **Area overrides:** define your own highlighted sections for an area (title, icon, order, layout),
-  matched by labels or integrations, followed by all remaining devices of that area.
+  matched by labels or integrations – instead of or after the default sections – followed by all
+  remaining devices of that area.
 - **Area tiles:** choose what an area's tile on the overview page shows instead of temperature/humidity.
 - **Popups:** open a card of your choice when a card is tapped, instead of the entity's info dialog.
 - **Area states:** see at a glance which rooms are occupied, heated, humidified … – tinted tiles and
@@ -50,7 +51,7 @@ parts, each with a short summary of what is set.
 <table>
 <tr>
 <td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=d81f8714d2" alt="Editor: overview page settings"></td>
-<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=ea4db61136" alt="Editor: area layout with sections"></td>
+<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=f55c0f7ae6" alt="Editor: area layout with sections"></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup"></td>
@@ -94,8 +95,8 @@ To configure it, open the dashboard → ✏️ (edit). The visual editor has thr
   entities – the same as in the built-in Overview, or own settings for this dashboard. *Summaries and shortcuts* (with the
   built-in settings: *Pages of the summaries*) and *Area states* are collapsible parts of it.
 - **Area layouts:** every area with its own layout is a collapsible block showing its sections and a
-  short summary. Inside: badges, the toggles for remaining devices and automations, and the sections
-  (title, icon, layout, label). *Refine selection*, *Entity filter* and *Primary entity* are form
+  short summary. Inside: badges, the toggles for the default sections, remaining devices and
+  automations, and the sections (title, icon, layout, label). *Refine selection*, *Entity filter* and *Primary entity* are form
   fields too: integration, domain, device class, manufacturer and model are dropdowns filled from your
   own installation (own values can be typed), plus devices, entities, device name and exclusions.
   *Add area* gives another area its own layout; *Remove area layout* returns it to the default view.
@@ -330,6 +331,7 @@ strategy:
           match: { integration: mqtt, manufacturer: Proxmox }
           entities:
             include_domains: [sensor, binary_sensor]
+      show_default_sections: false   # default
       show_other_devices: true       # default
       show_automations: true         # default
       tile:                          # the area's tile on the overview page (area card options)
@@ -354,13 +356,20 @@ looks like the compact area card:
         alert_classes: [problem]
 ```
 
-When an area has `sections`, the standard categories (lights, climate, security, media players,
-scenes) are not built. The configured sections are shown in order, followed by all remaining devices
-of the area and its automations, as in the default view.
+When an area has `sections`, the configured sections are shown in order, followed by all remaining
+devices of the area and its automations, as in the default view. The standard categories (lights,
+climate, security, media players, scenes) are left out – unless `show_default_sections: true` is set:
+then they come first, followed by the configured sections, the remaining devices and the automations.
+This way an area like *Proxmox* shows only its own sections, while an *Office* keeps the default view
+and gains e.g. a *Multimedia* section with the power plugs of TV, receiver and speakers.
 
-- An **entity** is shown in the first section that selects it (`match` and `entities`); later
-  sections do not show it again. Other entities of the same device are not taken along: they can be
-  selected by a later section, or appear in the device's card below, as in the built-in area view.
+- An **entity** is shown only once, in the first section that selects it (`match` and `entities`).
+  The configured sections select first, the standard categories take what is left. Other entities of
+  the same device are not taken along: they can be selected by a later section, or appear in the
+  device's card below, as in the built-in area view.
+- The **heading** of a section opens the device page if the section shows entities of one device,
+  or a list of its devices if it shows several – a click on a device opens its device page. (Device
+  pages are for administrators; for other users the heading has no action.)
 - `layout`:
   - `tiles` (default): one tile per entity.
   - `devices`: a heading per device with its entities.

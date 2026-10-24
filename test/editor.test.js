@@ -589,3 +589,16 @@ test("confirmations: the action runs once, after a cancel the right item is dele
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(calls, 2, "one copy (home + security), not two");
 });
+
+test("area layout: the default sections can be switched on, shown in the area summary", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Ground › Living room");
+  const options = formWith(panel, "show_default_sections");
+  assert.equal(options.data.show_default_sections, false);
+  edit(options, { show_default_sections: true });
+  assert.equal(last().area_overrides.living_room.show_default_sections, true);
+  assert.equal(last().area_overrides.proxmox.show_default_sections, undefined);
+  assert.match(summary(panel), /with default sections/);
+  edit(formWith(panel, "show_default_sections"), { show_default_sections: false });
+  assert.equal(last().area_overrides.living_room.show_default_sections, undefined);
+});

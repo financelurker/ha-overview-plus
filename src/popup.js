@@ -23,35 +23,11 @@
  */
 
 import { POPUP_KEY, substitute } from "./card-factory.js";
+import { insideDialog, openDialog } from "./dialog.js";
 import { t } from "./i18n.js";
 
-const TAG = "overview-plus-popup";
-
-// mdiClose, mdiInformationOutline
-const CLOSE_PATH = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
+// mdiInformationOutline
 const INFO_PATH = "M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z";
-
-const STYLE = `
-  dialog {
-    border: none; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px);
-    border-radius: var(--ha-dialog-border-radius, 24px);
-    background: var(--ha-dialog-surface-background, var(--card-background-color, #fff));
-    color: var(--primary-text-color); box-shadow: var(--ha-dialog-box-shadow, 0 8px 32px rgba(0,0,0,.3));
-    overflow: hidden; display: flex; flex-direction: column;
-  }
-  dialog:not([open]) { display: none; }
-  dialog::backdrop { background: var(--ha-dialog-scrim-color, rgba(0, 0, 0, 0.32)); }
-  header { display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px 24px; }
-  header .title { flex: 1; font-size: 22px; line-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  header button { all: unset; cursor: pointer; width: 40px; height: 40px; border-radius: 50%;
-    display: inline-flex; align-items: center; justify-content: center; color: var(--secondary-text-color); }
-  header button:hover, header button:focus-visible { background: var(--secondary-background-color, rgba(0,0,0,.06)); }
-  header svg { width: 24px; height: 24px; fill: currentColor; }
-  .content { padding: 8px 24px 24px; overflow: auto; }
-  @media (max-width: 600px) {
-    dialog { width: 100vw; max-width: 100vw; height: 100%; max-height: 100%; border-radius: 0; }
-  }
-`;
 
 /** @param {any} v */
 const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -126,28 +102,32 @@ async function openPopup(popup, entityId) {
   }
   card.hass = hass;
 
-  const host = document.createElement(TAG);
-  const root = host.attachShadow({ mode: "open" });
-  root.innerHTML = `<style>${STYLE}</style><dialog><header><span class="title"></span>` +
-    `<button class="info"><svg viewBox="0 0 24 24"><path d="${INFO_PATH}"/></svg></button>` +
-    `<button class="close"><svg viewBox="0 0 24 24"><path d="${CLOSE_PATH}"/></svg></button></header>` +
-    `<div class="content"></div></dialog>`;
-  const dialog = /** @type {HTMLDialogElement} */ (root.querySelector("dialog"));
   const stateObj = entityId ? hass.states?.[entityId] : undefined;
-  /** @type {HTMLElement} */ (root.querySelector(".title")).textContent = stateObj?.attributes?.friendly_name ?? "";
-  const info = /** @type {HTMLButtonElement} */ (root.querySelector(".info"));
-  const close = /** @type {HTMLButtonElement} */ (root.querySelector(".close"));
-  info.title = t(hass, "popup_more_info");
-  info.setAttribute("aria-label", info.title);
-  close.title = t(hass, "popup_close");
-  close.setAttribute("aria-label", close.title);
-  if (!entityId) info.hidden = true;
-  /** @type {HTMLElement} */ (root.querySelector(".content")).appendChild(card);
 
   // Follow state changes while open: home-assistant gets a new hass object on every change
   let frame = 0;
+  const { content, dismiss } = openDialog({
+    title: stateObj?.attributes?.friendly_name ?? "",
+    closeLabel: t(hass, "popup_close"),
+    buttons: entityId ? [{
+      path: INFO_PATH,
+      label: t(hass, "popup_more_info"),
+      className: "info",
+      onClick: () => {
+        dismiss();
+        passThrough = true;
+        try {
+          homeAssistant()?.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
+        } finally {
+          passThrough = false;
+        }
+      },
+    }] : [],
+    onClose: () => cancelAnimationFrame(frame),
+  });
+  content.appendChild(card);
   const follow = () => {
-    if (!host.isConnected) return;
+    if (!card.isConnected) return;
     const next = homeAssistant()?.hass;
     if (next && next !== hass) {
       hass = next;
@@ -156,39 +136,10 @@ async function openPopup(popup, entityId) {
     frame = requestAnimationFrame(follow);
   };
   frame = requestAnimationFrame(follow);
-
-  const dismiss = () => {
-    cancelAnimationFrame(frame);
-    window.removeEventListener("location-changed", dismiss);
-    window.removeEventListener("popstate", dismiss);
-    if (dialog.open) dialog.close();
-    host.remove();
-  };
-  // Navigating away (also the back button on phones) closes the popup
-  window.addEventListener("location-changed", dismiss);
-  window.addEventListener("popstate", dismiss);
-  dialog.addEventListener("close", dismiss); // Escape key
-  dialog.addEventListener("click", (ev) => {
-    if (ev.target === dialog) dismiss(); // click on the backdrop
-  });
-  close.addEventListener("click", dismiss);
-  info.addEventListener("click", () => {
-    dismiss();
-    passThrough = true;
-    try {
-      homeAssistant()?.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
-    } finally {
-      passThrough = false;
-    }
-  });
-  document.body.appendChild(host);
-  if (typeof dialog.showModal === "function") dialog.showModal();
-  else dialog.setAttribute("open", "");
   return true;
 }
 
-/** @param {Event} ev */
-const insidePopup = (ev) => ev.composedPath().some((el) => /** @type {any} */ (el)?.localName === TAG);
+const insidePopup = insideDialog;
 
 /**
  * Popup of the card that last fired `hass-action`. Many cards hand their actions to

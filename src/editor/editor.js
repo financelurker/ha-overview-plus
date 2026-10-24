@@ -131,6 +131,7 @@ const newAreaEntry = (area) => ({
   area,
   badges: "default",
   badge_entities: [],
+  show_default_sections: false,
   show_other_devices: true,
   show_automations: true,
   t_sensors: "default",
@@ -1020,6 +1021,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _areaSummary(entry) {
     const n = entry.sections.length;
     const parts = [this._t(n === 1 ? "editor_one_section" : "editor_n_sections", { n: String(n) })];
+    if (entry.show_default_sections === true) parts.push(this._t("editor_with_default_sections"));
     if (entry.badges !== "default") parts.push(`${this._t("editor_badges")}: ${this._t(`editor_badges_${entry.badges}`)}`);
     return parts.join(" · ");
   }
@@ -1075,6 +1077,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return {
       badges: entry.badges,
       badge_entities: entry.badge_entities,
+      show_default_sections: entry.show_default_sections === true,
       show_other_devices: entry.show_other_devices,
       show_automations: entry.show_automations,
       t_sensors: entry.t_sensors ?? "default",
@@ -1098,6 +1101,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return [
       { name: "badges", required: true, selector: { select: { mode: "dropdown", options: badgeOptions } } },
       ...(entry.badges === "custom" ? [{ name: "badge_entities", selector: { entity: { multiple: true } } }] : []),
+      { name: "show_default_sections", selector: { boolean: {} } },
       { name: "", type: "grid", schema: [
         { name: "show_other_devices", selector: { boolean: {} } },
         { name: "show_automations", selector: { boolean: {} } },

@@ -14,7 +14,7 @@
  *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_tap, r_popup_type, r_popup_options,
  *            r_scope, r_contexts, r_stop, m_* }]
  *   areas: [{
- *     area, badges: "default" | "none" | "custom", badge_entities, show_other_devices, show_automations,
+ *     area, badges: "default" | "none" | "custom", badge_entities, show_default_sections, show_other_devices, show_automations,
  *     sections: [{ title, icon, layout, m_*, e_*, p_* }]
  *   }]
  *
@@ -365,7 +365,7 @@ export function toForm(config) {
     debug: config.debug === true,
     rules: (Array.isArray(config.card_rules) ? config.card_rules : []).map(ruleToForm),
     areas: Object.entries(overrides).map(([area, o]) => {
-      const { sections, badges, show_other_devices, show_automations, tile, ...rest } = isPlainObject(o) ? o : {};
+      const { sections, badges, show_default_sections, show_other_devices, show_automations, tile, ...rest } = isPlainObject(o) ? o : {};
       const { sensor_classes, alert_classes, color, name, entities, show_names, alert_entities, ...tileExtra } =
         isPlainObject(tile) ? tile : {};
       const entityList = toList(entities);
@@ -383,6 +383,7 @@ export function toForm(config) {
         tile_extra: tileExtra,
         badges: badges === false ? "none" : Array.isArray(badges) ? "custom" : "default",
         badge_entities: Array.isArray(badges) ? [...badges] : [],
+        show_default_sections: show_default_sections === true,
         show_other_devices: show_other_devices !== false,
         show_automations: show_automations !== false,
         sections: (Array.isArray(sections) ? sections : []).map(sectionToForm),
@@ -420,7 +421,7 @@ export function fromForm(form, original) {
   for (const entry of Array.isArray(form.areas) ? form.areas : []) {
     if (!entry?.area) continue;
     const {
-      area, badges, badge_entities, show_other_devices, show_automations, sections,
+      area, badges, badge_entities, show_default_sections, show_other_devices, show_automations, sections,
       t_sensors, t_sensor_classes, t_entities, t_show_names, t_alert_classes, t_alert_entities, t_color, t_name, tile_extra, ...rest
     } = entry;
     /** @type {Record<string, any>} */
@@ -439,6 +440,7 @@ export function fromForm(form, original) {
     if (Object.keys(tile).length) o.tile = tile;
     if (badges === "none") o.badges = false;
     else if (badges === "custom") o.badges = [...(badge_entities || [])];
+    if (show_default_sections === true) o.show_default_sections = true;
     if (show_other_devices === false) o.show_other_devices = false;
     if (show_automations === false) o.show_automations = false;
     const list = (Array.isArray(sections) ? sections : []).map(formToSection);
