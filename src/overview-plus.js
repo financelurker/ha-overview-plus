@@ -21,6 +21,7 @@ import { generateMediaPlayersView, generateOtherDevicesView } from "./views/medi
 import { LAZY_TYPE, lazifyView } from "./lazy-card.js";
 import "./area-tile-card.js";
 import "./popup.js";
+import "./device-list.js";
 
 export const VERSION = "0.0.0";
 

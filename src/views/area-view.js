@@ -7,14 +7,21 @@
  * Lights, Climate, Security, Media players, Scenes, then one section per remaining
  * device, then Automations.
  *
- * With `area_overrides.<area_id>.sections` the standard categories are not built.
- * Instead the configured sections come first, in order, followed by all remaining
- * devices of the area (and automations), as in the default view. An entity is shown
- * in the first section that selects it; entities of a device that no section shows
- * appear in that device's card below.
+ * With `area_overrides.<area_id>.sections` the configured sections are shown in order,
+ * followed by all remaining devices of the area (and automations), as in the default
+ * view. The standard categories are left out, unless `show_default_sections` is set:
+ * then they come first, before the configured sections.
+ *
+ * An entity is shown only once. The configured sections select first (explicit
+ * configuration wins), in their order; the standard categories take what is left;
+ * entities of a device that no section shows appear in that device's card below.
+ *
+ * The heading of a configured section leads to its devices: to the device page if it
+ * shows one device, to a list of its devices (device-list.js) if it shows several.
  */
 
 import { createCardFactory } from "../card-factory.js";
+import { DEVICE_LIST_KEY } from "../device-list.js";
 import { summaryPage } from "../summary-pages.js";
 import { findEntities, simpleFilter, SUMMARY_FILTERS, SUMMARY_ICONS } from "../entity-filter.js";
 import { t } from "../i18n.js";
@@ -45,6 +52,7 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
 /**
  * @typedef {Object} AreaOverride
  * @property {OverrideSection[]} [sections]
+ * @property {boolean} [show_default_sections]   default false: keep the standard categories
  * @property {boolean} [show_other_devices]      default true
  * @property {boolean} [show_automations]        default true
  * @property {string[] | false} [badges]         entity ids shown as badges; false = none
@@ -113,6 +121,30 @@ const navigate = (path) => ({ action: "navigate", navigation_path: path });
  */
 const deviceTapAction = (hass, device) =>
   hass.user?.is_admin && device ? navigate(`/config/devices/device/${device.id}`) : undefined;
+
+/**
+ * Tap action of a configured section's title: the device page if the section shows one
+ * device, the list of its devices if it shows several (opened by device-list.js), none
+ * without devices or for users who cannot open device pages.
+ * @param {any} hass
+ * @param {OverrideSection} section
+ * @param {EntityContext[]} shown
+ * @param {any} [stripArea]
+ * @returns {Record<string, any> | undefined}
+ */
+function sectionTapAction(hass, section, shown, stripArea) {
+  if (!hass.user?.is_admin) return undefined;
+  const devices = [...new Map(shown.filter((ctx) => ctx.device).map((ctx) => [ctx.device.id, ctx.device])).values()];
+  if (devices.length === 1) return deviceTapAction(hass, devices[0]);
+  if (!devices.length) return undefined;
+  return {
+    action: "fire-dom-event",
+    [DEVICE_LIST_KEY]: {
+      title: section.title ?? "",
+      devices: devices.map((device) => ({ id: device.id, name: stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") })),
+    },
+  };
+}
 
 /**
  * Group entity contexts by device; entities without device are grouped under "".
@@ -228,6 +260,8 @@ export function generateAreaView(hass, areaId, options = {}) {
   const sections = [];
   /** @type {Set<string>} entity ids already shown or intentionally consumed */
   const consumed = new Set();
+  /** @type {Record<string, any>[]} configured sections, shown after the standard categories */
+  const ownSections = [];
 
   // ---------------------------------------------------------------- badges
   let badgeEntities;
@@ -257,18 +291,21 @@ export function generateAreaView(hass, areaId, options = {}) {
       // the built-in area view (where the categories take single entities of a device).
       const shown = matched.filter(selectionFilter(section.entities));
       for (const ctx of shown) consumed.add(ctx.entity_id);
-      const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined);
+      const built = buildOverrideSection(hass, section, shown, highlight, card, compact, stripNames ? area : undefined, sectionTapAction(hass, section, shown, stripNames ? area : undefined));
       report.sections.push({
         title: section.title ?? `#${index + 1}`,
         layout: section.layout ?? "tiles",
         devices: [...new Set(shown.map((ctx) => (ctx.device ? deviceName(ctx.device) : ctx.entity_id)))],
         entities: shown.length,
       });
-      sections.push(...built);
+      ownSections.push(...built);
     }
-  } else {
+  }
+  if (!hasOverride || override?.show_default_sections === true) {
+    // The standard categories take what the configured sections left
+    const free = all.filter((ctx) => !consumed.has(ctx.entity_id));
     const bySummary = Object.fromEntries(
-      Object.entries(SUMMARY_FILTERS).map(([key, filters]) => [key, findEntities(all, filters)])
+      Object.entries(SUMMARY_FILTERS).map(([key, filters]) => [key, findEntities(free, filters)])
     );
     for (const list of Object.values(bySummary)) for (const ctx of list) consumed.add(ctx.entity_id);
 
@@ -318,7 +355,7 @@ export function generateAreaView(hass, areaId, options = {}) {
       });
     }
 
-    const scenes = all.filter(simpleFilter({ domain: "scene", entity_category: "none" }));
+    const scenes = free.filter(simpleFilter({ domain: "scene", entity_category: "none" }));
     for (const ctx of scenes) consumed.add(ctx.entity_id);
     if (scenes.length) {
       sections.push({
@@ -332,6 +369,8 @@ export function generateAreaView(hass, areaId, options = {}) {
       });
     }
   }
+
+  sections.push(...ownSections);
 
   // ------------------------------------------------------ remaining devices
   const automations = all.filter(simpleFilter({ domain: "automation", entity_category: "none" }));
@@ -424,12 +463,13 @@ export function generateAreaView(hass, areaId, options = {}) {
  * @param {(f: ReturnType<typeof createCardFactory>, ctx: EntityContext, extra?: Record<string, any>) => Record<string, any> | null} card
  * @param {(cards: (Record<string, any> | null | undefined)[]) => Record<string, any>[]} compact
  * @param {any} [stripArea] area whose name is removed from device names (headings, titles, compact tiles)
+ * @param {Record<string, any>} [tapAction] of the section title
  * @returns {Record<string, any>[]}
  */
-function buildOverrideSection(hass, section, shown, factory, card, compact, stripArea) {
+function buildOverrideSection(hass, section, shown, factory, card, compact, stripArea, tapAction) {
   if (!shown.length) return [];
   const layout = section.layout ?? "tiles";
-  const title = headingCard(section.title ?? "", section.icon);
+  const title = headingCard(section.title ?? "", section.icon, tapAction ? { tap_action: tapAction } : {});
 
   if (layout === "tiles") {
     return [{ type: "grid", cards: [title, ...compact(shown.map((ctx) => card(factory, ctx)))] }];

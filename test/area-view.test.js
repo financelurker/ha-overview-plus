@@ -288,3 +288,37 @@ test("category headings lead to the configured summary pages", () => {
   assert.equal(heading("Lights").tap_action.navigation_path, "/lights-plus/0");
   assert.equal(heading("Climate").tap_action.navigation_path, "/climate?historyBack=1");
 });
+
+const MULTIMEDIA = { title: "Multimedia", icon: "mdi:television", match: { entity: ["media_player.tv", "switch.plug"] } };
+
+test("area override with default sections: categories, then own sections, then remaining devices", () => {
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections: [MULTIMEDIA] } });
+  // the own section takes the TV first (explicit configuration wins): no "Media players" category,
+  // and the plug's only entity is in "Multimedia", so "Coffee machine" is not shown below
+  assert.deepEqual(headings(view), ["Lights", "Climate", "Scenes", "Multimedia", "", "Radiator", "Others", "Automations"]);
+  const ids = cards(view).map((c) => c.entity);
+  for (const id of ["media_player.tv", "switch.plug"]) assert.equal(ids.filter((e) => e === id).length, 1, `${id} shown once`);
+});
+
+test("area override without default sections leaves the categories out (default)", () => {
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { sections: [MULTIMEDIA] } });
+  assert.deepEqual(headings(view).slice(0, 2), ["Multimedia", ""]);
+  assert.ok(!headings(view).includes("Lights"));
+});
+
+test("own section heading: device page for one device, device list for several, nothing without devices", () => {
+  const sections = [
+    MULTIMEDIA,
+    { title: "Heating", match: { entity: "climate.living" } },
+    { title: "Lamp", match: { entity: "light.lamp" } },
+  ];
+  const tap = (hass, title) =>
+    generateAreaView(hass, "living_room", { override: { sections } }).view.sections.find((s) => s.cards[0]?.heading === title).cards[0].tap_action;
+  assert.deepEqual(tap(makeHass(), "Multimedia"), {
+    action: "fire-dom-event",
+    overview_plus_devices: { title: "Multimedia", devices: [{ id: "dev_tv", name: "TV" }, { id: "dev_plug", name: "Coffee machine" }] },
+  });
+  assert.deepEqual(tap(makeHass(), "Heating"), { action: "navigate", navigation_path: "/config/devices/device/dev_trv" });
+  assert.equal(tap(makeHass(), "Lamp"), undefined);
+  assert.equal(tap(makeHass({ user: { is_admin: false } }), "Multimedia"), undefined, "device pages are for admins");
+});

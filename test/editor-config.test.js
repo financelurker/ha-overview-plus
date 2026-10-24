@@ -32,7 +32,7 @@ const FULL = {
         { title: "Either", match: [{ domain: "light" }, { domain: "switch" }], primary: { domain: "sensor", not: { device_class: "x" } } },
       ],
     },
-    truenas: { badges: ["sensor.pool_usage"], show_automations: false, tile: { sensor_classes: [], alert_classes: ["problem"], color: "blue", name: "NAS", aspect_ratio: "1" } },
+    truenas: { badges: ["sensor.pool_usage"], show_default_sections: true, show_automations: false, tile: { sensor_classes: [], alert_classes: ["problem"], color: "blue", name: "NAS", aspect_ratio: "1" } },
     network: { tile: { alert_classes: ["connectivity"] } },
     proxmox_tile: { tile: { entities: ["sensor.cpu", { entity: "sensor.ram", name: "RAM" }], show_names: true, alert_entities: ["binary_sensor.vm"] } },
   },
