@@ -85,6 +85,7 @@ const STYLE = `
   .entity-list .list-help { font-size: 12px; color: var(--secondary-text-color); padding: 0 16px; }
   .delete-icon { color: var(--error-color, #db4437); }
   .col-empty { display: inline-block; width: 48px; height: 1px; flex: none; }
+  .section-icon { display: inline-block; min-width: 24px; min-height: 24px; }
   .item-row .secondary { display: block; font-size: 12px; font-weight: normal; color: var(--secondary-text-color); }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
     border-radius: var(--ha-border-radius-md, 12px); background: color-mix(in srgb, var(--error-color, #db4437) 8%, transparent); }
@@ -545,6 +546,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     const title = document.createElement("span");
     const sub = document.createElement("span");
     sub.className = "secondary";
+    if (extras.leading) summary.append(extras.leading);
     summary.append(title, sub);
     const body = document.createElement("div");
     body.className = "panel-body";
@@ -1367,18 +1369,27 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
       const number = own++;
       const { header, secondary } = this._sectionHeader(section, number);
+      // The section's icon in front, as for the default sections (empty space without one)
+      const leading = /** @type {any} */ (document.createElement("ha-icon"));
+      leading.className = "summary-icon section-icon";
+      const setIcon = () => {
+        if (section.icon) leading.icon = section.icon;
+        else leading.icon = undefined;
+      };
+      setIcon();
       /** Header text, and the name of the switch for screen readers */
       const refresh = () => {
         const h = this._sectionHeader(section, number);
         panel.setHeader(h.header, h.secondary);
         toggle.setAttribute("aria-label", `${this._t("editor_show")}: ${h.header}`);
         panel.root.classList.toggle("off", !!section.hidden);
+        setIcon();
       };
       const toggle = this._visibleToggle(section, header, () => refresh());
       const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
         if (isOpen) open.add(index);
         else open.delete(index);
-      }, { icons: [...moves, toggle] });
+      }, { leading, icons: [...moves, toggle] });
       panel.root.classList.toggle("off", !!section.hidden);
 
       const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
