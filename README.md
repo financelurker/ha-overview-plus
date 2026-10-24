@@ -408,6 +408,16 @@ shows nothing and selects nothing: its entities appear with the remaining device
   ```
 
   The states are the ones Home Assistant stores (`off`), not the translated text (*Clear*).
+- `sort` orders the entities of a section group by group – each in the first group it fits, the rest
+  after them; without `sort`, and within a group, Home Assistant's order applies as in the built-in
+  Overview. A group has a `domain`, a `device_class` or both (one value or a list). In layouts by
+  device, devices keep their order and `sort` applies within each device:
+
+  ```yaml
+          sort:
+            - { domain: binary_sensor, device_class: occupancy }
+            - { domain: [switch, light] }
+  ```
 
 ## License
 

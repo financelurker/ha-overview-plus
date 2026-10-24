@@ -86,9 +86,10 @@ const STYLE = `
   .delete-icon { color: var(--error-color, #db4437); }
   .col-empty { display: inline-block; width: 48px; height: 1px; flex: none; }
   .section-icon { display: inline-block; min-width: 24px; min-height: 24px; }
-  .hide-rule { display: flex; align-items: flex-start; gap: 4px; }
-  .hide-rule ha-form { flex: 1; min-width: 0; }
-  .hide-rules { margin-top: 8px; }
+  .group-row { display: flex; align-items: flex-start; gap: 4px; padding: 8px 4px 0 12px; box-sizing: border-box;
+    border: 1px solid var(--divider-color, #e0e0e0); border-radius: var(--ha-border-radius-md, 12px); }
+  .group-row ha-form { flex: 1; min-width: 0; }
+  .hide-rules, .sort-groups { margin-top: 8px; }
   .off .section-icon { opacity: 0.5; }
   .item-row .secondary { display: block; font-size: 12px; font-weight: normal; color: var(--secondary-text-color); }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
@@ -188,6 +189,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openTiles = new Set();
     /** @type {WeakSet<any>} sections whose "hide while in state" block is expanded */
     this._openHideRules = new WeakSet();
+    /** @type {WeakSet<any>} sections whose "order" block is expanded */
+    this._openSortGroups = new WeakSet();
     /** @type {Set<number>} indexes of expanded card rule blocks */
     this._openRules = new Set();
     /** @type {Set<number>} indexes of expanded shortcut blocks */
@@ -1400,6 +1403,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         const before = sectionShape(section);
         const hidden = section.hidden;
         const hideRules = section.hide_rules;
+        const sortGroups = section.sort_groups;
         for (const key of Object.keys(section)) delete section[key];
         Object.assign(section, v);
         // shown/hidden is set by the switch in the header, the hide rules by their own rows
@@ -1407,6 +1411,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         else delete section.hidden;
         if (hideRules) section.hide_rules = hideRules;
         else delete section.hide_rules;
+        if (sortGroups) section.sort_groups = sortGroups;
+        else delete section.sort_groups;
         if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
         refresh();
         this._emit();
@@ -1422,7 +1428,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         refreshAreaHeader();
         this._emit();
       }));
-      panel.body.append(form, this._hideRulesBlock(section), row);
+      panel.body.append(form, this._groupRowsBlock(section, "hide"), this._groupRowsBlock(section, "sort"), row);
       container.appendChild(panel.root);
     });
   }
@@ -1448,25 +1454,37 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   }
 
   /**
-   * "Hide while in state": rules of an own section, one row each – domain, optional
-   * device class, states. Their cards are hidden live while the state is one of these.
+   * Rows of domain / device class groups in an own section, one block each:
+   * - "hide": "Hide while in state" – domains, device classes, states; cards are hidden
+   *   live while their entity's state is one of these.
+   * - "sort": "Order" – domains, device classes, in the order of the rows (↑/↓); entities
+   *   are shown group by group, the rest after them.
    * @param {any} section
+   * @param {"hide" | "sort"} kind
    */
-  _hideRulesBlock(section) {
-    const rules = /** @type {any[]} */ (section.hide_rules ||= []);
+  _groupRowsBlock(section, kind) {
+    const hide = kind === "hide";
+    const k = hide
+      ? { field: "hide_rules", title: "editor_hide_states", help: "editor_hide_states_help", one: "editor_hide_rules_one", many: "editor_hide_rules_n",
+          add: "editor_add_hide_rule", del: "editor_delete_hide_rule", prefix: "hr_", open: this._openHideRules, cls: "hide-rules" }
+      : { field: "sort_groups", title: "editor_sort", help: "editor_sort_help", one: "editor_sort_one", many: "editor_sort_n",
+          add: "editor_add_sort_group", del: "editor_delete_sort_group", prefix: "sg_", open: this._openSortGroups, cls: "sort-groups" };
+    const rules = /** @type {any[]} */ (section[k.field] ||= []);
+    /** @param {any} r */
+    const valid = (r) => (hide ? r.states?.length : r.domain?.length || r.device_class?.length);
     const summary = () => {
-      const n = rules.filter((r) => r.states?.length).length;
-      return n ? this._t(n === 1 ? "editor_hide_rules_one" : "editor_hide_rules_n", { n: String(n) }) : "";
+      const n = rules.filter(valid).length;
+      return n ? this._t(n === 1 ? k.one : k.many, { n: String(n) }) : "";
     };
-    const panel = this._panel(this._t("editor_hide_states"), summary(), this._openHideRules.has(section), (open) => {
-      if (open) this._openHideRules.add(section);
-      else this._openHideRules.delete(section);
+    const panel = this._panel(this._t(k.title), summary(), k.open.has(section), (open) => {
+      if (open) k.open.add(section);
+      else k.open.delete(section);
     });
-    panel.root.classList.add("hide-rules");
+    panel.root.classList.add(k.cls);
     const list = document.createElement("div");
     list.className = "list";
     const changed = () => {
-      panel.setHeader(this._t("editor_hide_states"), summary());
+      panel.setHeader(this._t(k.title), summary());
       this._emit();
     };
     const domains = this._opts?.domains || [];
@@ -1474,60 +1492,71 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     // States to suggest: the usual ones and the non-numeric states of the chosen domains
     /** @type {Map<string, Set<string>>} */
     const byDomain = new Map();
-    for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
-      const value = String(st.state ?? "");
-      if (!value || !Number.isNaN(Number(value))) continue;
-      const domain = String(st.entity_id).split(".")[0];
-      if (!byDomain.has(domain)) byDomain.set(domain, new Set());
-      byDomain.get(domain)?.add(value);
+    if (hide) {
+      for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
+        const value = String(st.state ?? "");
+        if (!value || !Number.isNaN(Number(value))) continue;
+        const domain = String(st.entity_id).split(".")[0];
+        if (!byDomain.has(domain)) byDomain.set(domain, new Set());
+        byDomain.get(domain)?.add(value);
+      }
     }
-    /** @param {string[]} domains */
-    const stateOptions = (domains) => {
+    /** @param {string[]} chosen */
+    const stateOptions = (chosen) => {
       const seen = new Set(["off", "on", "unavailable", "unknown"]);
-      for (const domain of domains) for (const value of byDomain.get(domain) || []) if (seen.size < 40) seen.add(value);
+      for (const domain of chosen) for (const value of byDomain.get(domain) || []) if (seen.size < 40) seen.add(value);
       return [...seen].map((value) => ({ value, label: value }));
     };
+    /** @param {any} options */
+    const multi = (options) => ({ select: { mode: "dropdown", multiple: true, custom_value: true, options } });
     /** @param {any} rule */
     const schema = (rule) => [
       { name: "", type: "grid", schema: [
-        { name: "hr_domain", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: domains } } },
-        { name: "hr_device_class", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: deviceClasses } } },
+        { name: `${k.prefix}domain`, selector: multi(domains) },
+        { name: `${k.prefix}device_class`, selector: multi(deviceClasses) },
       ] },
-      { name: "hr_states", required: true, selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: stateOptions(rule.domain || []) } } },
+      ...(hide ? [{ name: "hr_states", required: true, selector: multi(stateOptions(rule.domain || [])) }] : []),
     ];
     const render = () => {
       list.replaceChildren();
       rules.forEach((rule, index) => {
         const row = document.createElement("div");
-        row.className = "hide-rule";
-        const form = this._haForm(schema(rule), { hr_domain: rule.domain || [], hr_device_class: rule.device_class || [], hr_states: rule.states || [] }, (v) => {
-          const domainChanged = JSON.stringify(v.hr_domain || []) !== JSON.stringify(rule.domain || []);
-          rule.domain = (v.hr_domain || []).filter(Boolean);
-          rule.device_class = (v.hr_device_class || []).filter(Boolean);
-          rule.states = (v.hr_states || []).filter(Boolean);
-          if (domainChanged) form.schema = schema(rule);
+        row.className = "group-row";
+        const data = { [`${k.prefix}domain`]: rule.domain || [], [`${k.prefix}device_class`]: rule.device_class || [], ...(hide ? { hr_states: rule.states || [] } : {}) };
+        const form = this._haForm(schema(rule), data, (v) => {
+          const domainChanged = JSON.stringify(v[`${k.prefix}domain`] || []) !== JSON.stringify(rule.domain || []);
+          rule.domain = (v[`${k.prefix}domain`] || []).filter(Boolean);
+          rule.device_class = (v[`${k.prefix}device_class`] || []).filter(Boolean);
+          if (hide) rule.states = (v.hr_states || []).filter(Boolean);
+          if (hide && domainChanged) form.schema = schema(rule);
           changed();
         });
-        const remove = this._iconButton(ICON.delete, this._t("editor_delete_hide_rule"), () => {
+        // Same columns as everywhere: ↑ ↓, then the red delete button
+        const moves = hide ? [] : this._moveButtons(index, rules.length, (delta) => {
+          [rules[index], rules[index + delta]] = [rules[index + delta], rules[index]];
+          render();
+          changed();
+        }, (i) => list.children[i]);
+        const remove = this._iconButton(ICON.delete, this._t(k.del), () => {
           rules.splice(index, 1);
           render();
           changed();
         });
         remove.classList.add("delete-icon");
-        row.append(form, remove);
+        row.append(form, ...moves, remove);
         list.append(row);
       });
     };
     render();
     const actions = document.createElement("div");
     actions.className = "row left";
-    actions.append(this._button(this._t("editor_add_hide_rule"), () => {
-      rules.push({ domain: [], device_class: [], states: [] });
-      this._openHideRules.add(section);
+    actions.append(this._button(this._t(k.add), () => {
+      rules.push(hide ? { domain: [], device_class: [], states: [] } : { domain: [], device_class: [] });
+      k.open.add(section);
       render();
-      // nothing to emit yet: a rule without states is not saved
+      // nothing to emit yet: an empty row is not saved
     }));
-    panel.body.append(this._hint("editor_hide_states_help"), list, actions);
+    panel.body.append(this._hint(k.help), list, actions);
     return panel.root;
   }
 
