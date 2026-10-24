@@ -51,7 +51,7 @@ parts, each with a short summary of what is set.
 <table>
 <tr>
 <td width="50%" valign="top"><b>Overview page</b> – favorites, summaries and shortcuts, own or those of the built-in Overview<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-overview-page.png?v=9b4326fc96" alt="Editor: overview page settings"></td>
-<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=b8bd6e8c68" alt="Editor: area layout with sections"></td>
+<td width="50%" valign="top"><b>Area layout</b> – badges, tile and sections, selected by label, integration and more<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-area.png?v=7fe53dde96" alt="Editor: area layout with sections"></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><b>Card rule</b> – replace a card and show another one in a popup on tap<br><br><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/editor-card-rule.png?v=ea3b760051" alt="Editor: card rule with popup"></td>

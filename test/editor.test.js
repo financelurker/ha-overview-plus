@@ -141,11 +141,11 @@ test("move and delete sections within an area", () => {
   });
   const panel = areaPanel(editor, "Virtual › Proxmox");
   const titles = () => last().area_overrides.proxmox.sections.map((s) => s.title);
-  click(buttons(panel, "Move down")[0]);
+  click(buttons(panel.querySelector(".sections"), "Move down")[0]);
   assert.deepEqual(titles(), ["B", "A", "C"]);
-  click(buttons(panel, "Delete section")[2]);
+  click(buttons(panel.querySelector(".sections"), "Delete section")[2]);
   assert.deepEqual(titles(), ["B", "A"]);
-  assert.equal(buttons(panel, "Move up")[0].disabled, true);
+  assert.equal(buttons(panel.querySelector(".sections"), "Move up")[0].disabled, true);
   assert.equal(summary(panel), "Virtual › Proxmox2 sections");
 });
 
@@ -640,4 +640,64 @@ test("ordered entity lists have no drag handles anywhere in the editor", () => {
   const all = forms(root(editor)).flatMap((f) => (function walk(schema) { return schema.flatMap((x) => (x.schema ? walk(x.schema) : [x])); })(f.schema));
   assert.ok(!all.some((field) => field.selector?.entity?.reorder), "no reorder (drag) entity selector");
   for (const field of ["h_favorites", "badge_entities", "t_entities"]) assert.ok(entityList(root(editor), field), field);
+});
+
+test("area layouts can be reordered; only the order of the config entries changes", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  assert.deepEqual(Object.keys(TWO_AREAS.area_overrides), ["proxmox", "living_room"]);
+  const second = areaPanel(editor, "Ground › Living room");
+  click(buttons(second.querySelector(".panel-body > .row"), "Move up")[0]);
+  assert.deepEqual(Object.keys(last().area_overrides), ["living_room", "proxmox"]);
+  assert.deepEqual(last().area_overrides.proxmox, TWO_AREAS.area_overrides.proxmox);
+  assert.deepEqual(areaPanels(editor).map(summary).map((s) => s.split("›")[1].trim().split(/\d/)[0]), ["Living room", "Proxmox"]);
+});
+
+test("after moving, the focus stays on the moved entry's arrow (keyboard users keep their place)", () => {
+  const { editor } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { badges: ["sensor.pve_cpu", "sensor.vm_web_cpu", "sensor.vm_db_cpu"] } } });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const list = () => entityList(panel, "badge_entities");
+  click(rowButton(list(), 0, "Move down"));
+  assert.equal(root(editor).activeElement, rowButton(list(), 1, "Move down"), "same arrow, one row further");
+  click(rowButton(list(), 1, "Move down"));
+  assert.equal(root(editor).activeElement, rowButton(list(), 2, "Move up"), "at the end: the other arrow");
+  assert.ok(list().getAttribute("aria-label"), "the list is a named group");
+  // the row pickers do not offer entities already in the list
+  const second = list().querySelectorAll(".entity-row ha-form")[1];
+  assert.deepEqual(second.schema[0].selector.entity.exclude_entities.sort(), ["sensor.pve_cpu", "sensor.vm_web_cpu"].sort().filter((e) => e !== second.data.entity));
+});
+
+test("the tile block stays open when its fields change, and is forgotten with its area", () => {
+  const config = { type: "custom:overview-plus", area_overrides: { proxmox: { tile: { color: "blue" } } } };
+  const { editor, last } = setup(config);
+  let tile = areaPanel(editor, "Virtual › Proxmox").querySelector(".tile-panel");
+  tile.open = true;
+  tile.dispatchEvent(new Event("toggle"));
+  edit(formWith(areaPanel(editor, "Virtual › Proxmox"), "t_sensors"), { t_sensors: "entities" });
+  tile = areaPanel(editor, "Virtual › Proxmox").querySelector(".tile-panel");
+  assert.ok(tile.open, "still open after the fields were rebuilt");
+  assert.ok(entityList(tile, "t_entities"));
+  // removing the area and adding it again: collapsed
+  click(buttons(areaPanel(editor, "Virtual › Proxmox"), "Remove area layout")[0]);
+  edit(formWith(root(editor), "add_area"), { add_area: "proxmox" });
+  assert.equal(areaPanel(editor, "Virtual › Proxmox").querySelector(".tile-panel").open, false);
+  assert.ok(last());
+});
+
+test("entity lists tolerate values that are not a list or contain nothing usable", () => {
+  for (const entities of ["sensor.pve_cpu", null, [null, 3, "sensor.pve_cpu"]]) {
+    const { editor } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { tile: { entities } } } });
+    const list = entityList(areaPanel(editor, "Virtual › Proxmox"), "t_entities");
+    assert.ok(list === null || list.querySelector("ha-form.entity-add"), String(entities));
+  }
+});
+
+test("Enter and Space on a header arrow move the entry instead of toggling the panel", () => {
+  const { editor } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Ground › Living room");
+  const seen = [];
+  panel.addEventListener("keydown", (ev) => seen.push(ev.key));
+  for (const key of ["Enter", " ", "ArrowDown"]) {
+    buttons(panel, "Move up")[0].dispatchEvent(new win.KeyboardEvent("keydown", { key, bubbles: true, composed: true }));
+  }
+  assert.deepEqual(seen, ["ArrowDown"], "only other keys reach the panel");
 });

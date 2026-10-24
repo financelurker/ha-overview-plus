@@ -72,7 +72,6 @@ const STYLE = `
   .general > ha-form { display: block; margin-bottom: 24px; }
   ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
   .panel-body { display: flex; flex-direction: column; gap: 24px; padding: 12px; }
-  .panel-body > .row.icons { margin-top: -16px; }
   .row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .row.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
   .row.split { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
@@ -129,6 +128,16 @@ const sectionShape = (s) => [(s.layout ?? "tiles") === "compact", filled(s.m_yam
 
 /** Things that change which fields a rule form shows. @param {any} r */
 const ruleShape = (r) => [r.r_action || "replace", r.r_scope || "entity", r.r_tap || "default", filled(r.m_yaml)].join();
+
+/**
+ * Enter and Space on a control in a panel header act on the control, not on the panel:
+ * ha-expansion-panel toggles on these keys in its whole header.
+ * @param {HTMLElement} el
+ */
+const keepKeys = (el) =>
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") ev.stopPropagation();
+  });
 
 /** Field names of an ha-form schema, also inside grids and expandables. @param {any[]} schema @returns {string[]} */
 const fieldNamesOf = (schema) => schema.flatMap((f) => (f.schema ? fieldNamesOf(f.schema) : f.name ? [f.name] : []));
@@ -222,6 +231,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     // Keep the open/closed state of areas that still exist; open the only area by default
     const ids = new Set(this._form.areas.map((/** @type {any} */ a) => a.area));
     this._openAreas = new Set([...this._openAreas].filter((id) => ids.has(id)));
+    this._openTiles = new Set([...this._openTiles].filter((id) => ids.has(id)));
     if (ids.size === 1) this._openAreas.add([...ids][0]);
     this._openSections = new Map();
     this._openRules = new Set([...this._openRules].filter((i) => i < this._form.rules.length));
@@ -282,9 +292,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
    * @param {string} name field name: label `editor_<name>`, help `editor_<name>_help`
    * @param {any[]} values
    * @param {(values: any[]) => void} onChange
-   * @param {Record<string, any>} [filter] entity selector filter
    */
-  _entityList(name, values, onChange, filter) {
+  _entityList(name, values, onChange) {
     const list = [...(Array.isArray(values) ? values : [])];
     const box = document.createElement("div");
     box.className = "entity-list";
@@ -292,7 +301,10 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     /** @param {any} v */
     const idOf = (v) => (typeof v === "string" ? v : v?.entity);
     /** @param {Record<string, any>} extra */
-    const selector = (extra = {}) => ({ entity: { ...(filter ? { filter } : {}), ...extra } });
+    const selector = (extra = {}) => ({ entity: extra });
+    // The visible title names the whole list for screen readers
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", this._t(`editor_${name}`));
     const changed = () => {
       onChange([...list]);
       render();
@@ -306,23 +318,20 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       list.forEach((value, index) => {
         const row = document.createElement("div");
         row.className = "entity-row";
-        const picker = this._haForm([{ name: "entity", selector: selector() }], { entity: idOf(value) }, (v) => {
+        // Entities already in the list are not offered again
+        const others = list.filter((_, i) => i !== index).map(idOf).filter(Boolean);
+        const picker = this._haForm([{ name: "entity", selector: selector({ exclude_entities: others }) }], { entity: idOf(value) }, (v) => {
           if (!v.entity) list.splice(index, 1);
           else list[index] = value && typeof value === "object" ? { ...value, entity: v.entity } : v.entity;
           changed();
         });
         picker.computeLabel = () => "";
         picker.computeHelper = () => undefined;
-        /** @param {number} delta */
-        const move = (delta) => {
+        const moves = this._moveButtons(index, list.length, (delta) => {
           [list[index], list[index + delta]] = [list[index + delta], list[index]];
           changed();
-        };
-        row.append(
-          picker,
-          this._iconButton(ICON.up, this._t("editor_move_up"), () => move(-1), index === 0),
-          this._iconButton(ICON.down, this._t("editor_move_down"), () => move(1), index === list.length - 1)
-        );
+        }, (i) => box.querySelectorAll(":scope > .entity-row")[i]);
+        row.append(picker, ...moves);
         box.append(row);
       });
       const add = this._haForm([{ name: "entity", selector: selector({ exclude_entities: list.map(idOf).filter(Boolean) }) }], {}, (v) => {
@@ -378,7 +387,13 @@ class OverviewPlusStrategyEditor extends HTMLElement {
   _confirm(host, message, confirmLabel, onConfirm) {
     const previous = Array.from(host.childNodes);
     // Focus goes back to the button that asked, if Cancel is chosen
-    const trigger = /** @type {HTMLElement | null} */ (/** @type {Document | ShadowRoot} */ (host.getRootNode()).activeElement ?? null);
+    /** @type {HTMLElement | null} */
+    let trigger = null;
+    try {
+      trigger = /** @type {any} */ (host.getRootNode()).activeElement ?? null;
+    } catch {
+      // no focused element to return to
+    }
     const box = document.createElement("div");
     box.className = "confirm";
     box.setAttribute("role", "alertdialog");
@@ -408,7 +423,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     box.append(text, buttons);
     host.replaceChildren(box);
     // ha-button renders its inner button asynchronously
-    requestAnimationFrame(() => cancel.focus());
+    cancel.focus();
+    window.requestAnimationFrame?.(() => cancel.focus());
   }
 
   /**
@@ -444,7 +460,41 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       ev.stopPropagation();
       if (!btn.disabled) onClick();
     });
+    keepKeys(btn);
     return btn;
+  }
+
+  /**
+   * ↑/↓ of entry `index` of `count` – the same everywhere in the editor. `move(delta)`
+   * reorders and re-renders; then the focus goes to the same button of the moved entry,
+   * so keyboard users keep their place.
+   * @param {number} index
+   * @param {number} count
+   * @param {(delta: number) => void} move
+   * @param {(index: number) => Element | null | undefined} entryAt root element of an entry after re-rendering
+   * @returns {HTMLElement[]}
+   */
+  _moveButtons(index, count, move, entryAt) {
+    /** @param {number} delta */
+    const make = (delta) => {
+      const cls = delta < 0 ? "move-up" : "move-down";
+      const btn = this._iconButton(delta < 0 ? ICON.up : ICON.down, this._t(delta < 0 ? "editor_move_up" : "editor_move_down"), () => {
+        move(delta);
+        const root = entryAt(index + delta);
+        if (!root) return;
+        /** @param {string} c */
+        const find = (c) => /** @type {any} */ (root.querySelector(`:scope > .${c}, :scope > .panel-body > .row:first-child > .${c}`));
+        const same = find(cls);
+        const other = find(delta < 0 ? "move-down" : "move-up");
+        const target = same && !same.disabled ? same : other;
+        // HA's buttons render asynchronously: try now and again in the next frame
+        target?.focus?.();
+        window.requestAnimationFrame?.(() => target?.focus?.());
+      }, delta < 0 ? index === 0 : index === count - 1);
+      btn.classList.add(cls);
+      return btn;
+    };
+    return [make(-1), make(1)];
   }
 
   /**
@@ -830,10 +880,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._emit();
     };
     items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
-      const move = [
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
-      ];
+      const move = this._moveButtons(index, items.length, (delta) => swap(index, delta), (i) => list.children[i]);
       if (item.custom !== undefined) {
         const row = document.createElement("div");
         row.className = "item-row";
@@ -863,6 +910,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       toggle.checked = !!item.enabled;
       toggle.setAttribute("aria-label", this._t(`indicator_${item.preset}`));
       toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
+    keepKeys(toggle);
       const leading = this._indicatorIcon({ ...preset, ...dropUnset(item) });
       const secondary = () => (item.enabled ? this._t(`editor_i_style_${item.style || preset.style}`) : this._t(`indicator_${item.preset}_help`));
       const panel = this._panel(this._t(`indicator_${item.preset}`), secondary(), this._openIndicators.has(item.preset), (open) => {
@@ -1010,10 +1058,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       rerender();
       this._emit();
     };
-    const moveButtons = (/** @type {number} */ index) => [
-      this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(index, -1), index === 0),
-      this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(index, 1), index === items.length - 1),
-    ];
+    const moveButtons = (/** @type {number} */ index) =>
+      this._moveButtons(index, items.length, (delta) => swap(index, delta), (i) => list.children[i]);
 
     items.forEach((/** @type {any} */ item, /** @type {number} */ index) => {
       if (item.type === "summary") {
@@ -1112,10 +1158,19 @@ class OverviewPlusStrategyEditor extends HTMLElement {
 
   /** @param {any} entry */
   _renderAreaPanel(entry) {
+    // The order of the area layouts is only the order of the entries in the configuration
+    const areas = this._form.areas;
+    const index = areas.indexOf(entry);
+    /** @param {number} delta */
+    const move = (delta) => {
+      [areas[index], areas[index + delta]] = [areas[index + delta], areas[index]];
+      this._renderAreas();
+      this._emit();
+    };
     const panel = this._panel(this._areaName(entry.area), this._areaSummary(entry), this._openAreas.has(entry.area), (open) => {
       if (open) this._openAreas.add(entry.area);
       else this._openAreas.delete(entry.area);
-    });
+    }, { icons: this._moveButtons(index, areas.length, move, (i) => this._parts.areas?.querySelectorAll(":scope > .area-panel")[i]) });
     panel.root.classList.add("area-panel");
     const refreshHeader = () => panel.setHeader(this._areaName(entry.area), this._areaSummary(entry));
 
@@ -1141,6 +1196,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       this._button(this._t("editor_remove_area"), () => {
         this._form.areas = this._form.areas.filter((/** @type {any} */ a) => a !== entry);
         this._openAreas.delete(entry.area);
+        this._openTiles.delete(entry.area);
         this._openSections.delete(entry.area);
         this._renderAreas();
         this._emit();
@@ -1252,10 +1308,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     entry.sections.forEach((/** @type {any} */ section, /** @type {number} */ index) => {
       const { header, secondary } = this._sectionHeader(section, index);
       // Order in the header (also while collapsed), deleting at the end of the body in red
-      const moves = [
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => this._move(entry, index, -1, rerender), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => this._move(entry, index, 1, rerender), index === entry.sections.length - 1),
-      ];
+      const moves = this._moveButtons(index, entry.sections.length, (delta) => this._move(entry, index, delta, rerender), (i) => container.children[i]);
       const panel = this._panel(header, secondary, open.has(index), (isOpen) => {
         if (isOpen) open.add(index);
         else open.delete(index);
@@ -1341,10 +1394,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         this._emit();
       };
       // Order in the header (also while collapsed), deleting at the end of the body in red
-      const moves = [
-        this._iconButton(ICON.up, this._t("editor_move_up"), () => swap(-1), index === 0),
-        this._iconButton(ICON.down, this._t("editor_move_down"), () => swap(1), index === rules.length - 1),
-      ];
+      const moves = this._moveButtons(index, rules.length, swap, (i) => container.children[i]);
       const panel = this._panel(header, secondary, this._openRules.has(index), (open) => {
         if (open) this._openRules.add(index);
         else this._openRules.delete(index);
