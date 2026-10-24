@@ -242,3 +242,26 @@ test("default sections: short configurations stay short, the shown order never c
   // a hidden own section keeps its key order
   assert.deepEqual(Object.keys(round([{ ...A, hidden: true }])[0]), ["title", "match", "hidden"]);
 });
+
+test("hide_states: rows in the form, the rest of the entity filter unchanged; short form becomes one rule", () => {
+  const rules = [{ domain: "binary_sensor", device_class: "occupancy", states: ["off"] }, { domain: "media_player", states: ["off", "standby"] }];
+  const section = { title: "A", match: { label: "a" }, entities: { include_domains: ["binary_sensor"], hide_states: rules } };
+  const cfg = { type: "x", area_overrides: { r: { sections: [section] } } };
+  const form = toForm(cfg);
+  const s = form.areas[0].sections[0];
+  assert.deepEqual(s.hide_rules, [
+    { domain: "binary_sensor", device_class: "occupancy", states: ["off"] },
+    { domain: "media_player", device_class: "", states: ["off", "standby"] },
+  ]);
+  assert.deepEqual(s.e_include_domains, ["binary_sensor"], "the other filter fields stay form fields");
+  assert.equal(s.e_yaml, undefined);
+  assert.deepEqual(fromForm(form, cfg).area_overrides.r.sections[0], section, "round trip");
+
+  const short = toForm({ type: "x", area_overrides: { r: { sections: [{ title: "B", match: { label: "b" }, entities: { hide_states: [false, "unavailable"] } }] } } });
+  assert.deepEqual(short.areas[0].sections[0].hide_rules, [{ domain: "", device_class: "", states: ["off", "unavailable"] }]);
+  assert.deepEqual(fromForm(short, {}).area_overrides.r.sections[0].entities, { hide_states: [{ states: ["off", "unavailable"] }] });
+
+  // rows without states are not written
+  form.areas[0].sections[0].hide_rules = [{ domain: "light", device_class: "", states: [] }];
+  assert.deepEqual(fromForm(form, cfg).area_overrides.r.sections[0].entities, { include_domains: ["binary_sensor"] });
+});

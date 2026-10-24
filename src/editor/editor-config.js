@@ -160,10 +160,45 @@ function fieldsToPrimary(fields) {
 
 // ---------------------------------------------------------------- sections
 
+/**
+ * "Hide while in state" rules of a section as the editor shows them: one row per rule.
+ * The short form (a list of states) becomes one rule for every domain.
+ * @param {any} hide
+ * @returns {{ domain: string, device_class: string, states: string[] }[]}
+ */
+function hideRulesToForm(hide) {
+  const list = /** @type {any[]} */ (toList(hide));
+  /** @param {any} v */
+  const text = (v) => (v === true ? "on" : v === false ? "off" : String(v));
+  if (list.every((r) => !isPlainObject(r))) {
+    const states = list.map(text).filter(Boolean);
+    return states.length ? [{ domain: "", device_class: "", states }] : [];
+  }
+  return list.filter(isPlainObject).map((r) => ({
+    domain: toList(r.domain).map(String)[0] ?? "",
+    device_class: toList(r.device_class).map(String)[0] ?? "",
+    states: toList(r.states ?? r.state).map(text).filter(Boolean),
+  }));
+}
+
+/** @param {any} rules @returns {Record<string, any>[] | undefined} */
+function hideRulesFromForm(rules) {
+  const out = (Array.isArray(rules) ? rules : [])
+    .map((r) => dropEmpty({ domain: r?.domain || undefined, device_class: r?.device_class || undefined, states: (r?.states || []).filter(Boolean) }))
+    .filter((r) => r.states?.length);
+  return out.length ? out : undefined;
+}
+
 /** @param {any} section */
 function sectionToForm(section) {
   const { match, entities, primary, ...rest } = isPlainObject(section) ? section : {};
-  return { ...rest, ...matchToFields(match), ...entitiesToFields(entities), ...primaryToFields(primary) };
+  // "Hide while in state" has its own rows in the editor, the rest of the entity filter its fields
+  const { hide_states, ...filter } = isPlainObject(entities) ? entities : { hide_states: undefined };
+  const others = isPlainObject(entities) ? (Object.keys(filter).length ? filter : undefined) : entities;
+  return {
+    ...rest, ...matchToFields(match), ...entitiesToFields(others), ...primaryToFields(primary),
+    ...(hide_states !== undefined ? { hide_rules: hideRulesToForm(hide_states) } : {}),
+  };
 }
 
 /**
@@ -209,16 +244,25 @@ function withoutDefaultOrder(list) {
   return list.slice(start);
 }
 
+/**
+ * @param {any} entities entity filter from the form fields (or YAML)
+ * @param {Record<string, any>[] | undefined} rules
+ */
+function withHideRules(entities, rules) {
+  if (!rules) return entities;
+  return isPlainObject(entities) || entities === undefined ? { ...(entities || {}), hide_states: rules } : entities;
+}
+
 /** @param {Record<string, any>} form */
 function formToSection(form) {
-  const { hidden, ...fields } = form || {};
+  const { hidden, hide_rules, ...fields } = form || {};
   const rest = withoutPrefix(withoutPrefix(withoutPrefix(fields, "m_"), "e_"), "p_");
   // A standard category placed in the list: only its key and whether it is hidden
   if (rest.default) return { default: rest.default, ...(hidden === true ? { hidden: true } : {}) };
   return dropEmpty({
     ...rest,
     match: fieldsToMatch(form || {}),
-    entities: fieldsToEntities(form || {}),
+    entities: withHideRules(fieldsToEntities(fields), hideRulesFromForm(hide_rules)),
     primary: fieldsToPrimary(form || {}),
     ...(hidden === true ? { hidden: true } : {}),
   });

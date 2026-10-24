@@ -397,6 +397,17 @@ shows nothing and selects nothing: its entities appear with the remaining device
 - `entities` narrows which matched entities are shown: `include_domains`, `exclude_domains`,
   `include_categories` (default `[none, diagnostic]`, i.e. configuration entities are hidden),
   `exclude_device_classes`, `exclude` (entity ids).
+- `entities.hide_states` hides a card **while** its entity is in one of the states (live, no reload);
+  a heading with nothing left to show disappears too. `domain` and `device_class` are optional:
+
+  ```yaml
+          entities:
+            hide_states:
+              - { domain: binary_sensor, device_class: occupancy, states: [off] }   # "Clear"
+              - { domain: media_player, states: [off, standby] }
+  ```
+
+  The states are the ones Home Assistant stores (`off`), not the translated text (*Clear*).
 
 ## License
 

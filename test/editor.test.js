@@ -774,3 +774,26 @@ test("own sections show their icon in front, as default sections do; it follows 
   edit(sectionForms(panel)[1], { icon: "mdi:cube-outline" });
   assert.deepEqual(icons(), ["mdi:server", "mdi:cube-outline"]);
 });
+
+test("hide while in state: conditions per section with domain, optional device class and states", () => {
+  const { editor, last } = setup(TWO_AREAS);
+  const panel = areaPanel(editor, "Ground › Living room");
+  const first = panel.querySelector(".sections > details");
+  const block = first.querySelector(".hide-rules");
+  assert.ok(block, "own block in the expanded section");
+  click(buttons(block, "Add condition")[0]);
+  const form = formWith(block, "hr_states");
+  edit(form, { hr_domain: "binary_sensor", hr_device_class: "occupancy", hr_states: ["off"] });
+  assert.deepEqual(last().area_overrides.living_room.sections[0].entities, { hide_states: [{ domain: "binary_sensor", device_class: "occupancy", states: ["off"] }] });
+  assert.match(summary(block), /1 condition/);
+  // editing the section form keeps the conditions
+  edit(sectionForms(first)[0], { title: "A2" });
+  assert.deepEqual(last().area_overrides.living_room.sections[0].entities.hide_states, [{ domain: "binary_sensor", device_class: "occupancy", states: ["off"] }]);
+  assert.equal(last().area_overrides.living_room.sections[0].title, "A2");
+  // the state suggestions follow the domain
+  const opts = formWith(block, "hr_states").schema.flatMap((f) => f.schema || [f]).find((f) => f.name === "hr_states").selector.select.options.map((o) => o.value);
+  assert.ok(opts.includes("off") && opts.includes("unavailable"));
+  // deleting the condition removes hide_states
+  click(buttons(block, "Delete condition")[0]);
+  assert.equal(last().area_overrides.living_room.sections[0].entities, undefined);
+});
