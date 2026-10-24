@@ -765,3 +765,12 @@ test("rows line up: an empty last column where a row has no switch", () => {
   const controls = buttons(shortcut, "Move down")[0].parentElement;
   assert.ok(controls.lastElementChild.classList.contains("col-empty"));
 });
+
+test("own sections show their icon in front, as default sections do; it follows the form", () => {
+  const { editor } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", icon: "mdi:server", match: { label: "a" } }, { title: "B", match: { label: "b" } }] } } });
+  const panel = areaPanel(editor, "Virtual › Proxmox");
+  const icons = () => [...panel.querySelectorAll(".sections .section-icon")].map((i) => i.icon);
+  assert.deepEqual(icons(), ["mdi:server", undefined], "without an icon: empty space, titles stay aligned");
+  edit(sectionForms(panel)[1], { icon: "mdi:cube-outline" });
+  assert.deepEqual(icons(), ["mdi:server", "mdi:cube-outline"]);
+});
