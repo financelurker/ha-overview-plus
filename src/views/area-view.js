@@ -171,6 +171,30 @@ function sectionTapAction(hass, section, shown, stripArea) {
 }
 
 /**
+ * Row name in a table (entities card under the device's name): the entity's own part of
+ * its name – "Storeroom Freezer Sensor Temperature" → "Temperature" in the area
+ * "Storeroom" under "Freezer Sensor". The area name is only removed if `stripArea` is set.
+ * @param {any} hass
+ * @param {EntityContext} ctx
+ * @param {string} full the name the card would show
+ * @param {any} device
+ * @param {any} [stripArea]
+ */
+function tableRowName(hass, ctx, full, device, stripArea) {
+  let name = stripArea ? stripAreaName(full, stripArea) : full;
+  if (device) {
+    // Home Assistant's own split into device and entity name, if it has one
+    const own = displayName(hass, ctx, { type: "entity" });
+    if (own && own !== full) name = stripArea ? stripAreaName(own, stripArea) : own;
+    else {
+      const device_ = deviceName(device);
+      for (const prefix of new Set([device_, stripAreaName(device_, stripArea)])) name = stripAreaName(name, { name: prefix });
+    }
+  }
+  return name || full;
+}
+
+/**
  * Group entity contexts by device; entities without device are grouped under "".
  * @param {EntityContext[]} entities
  * @returns {Map<string, EntityContext[]>}
@@ -559,7 +583,12 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
       return {
         type: "entities",
         title: device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"),
-        entities: entities.map((ctx) => ctx.entity_id),
+        // The card's title names the device: rows without area and device name
+        entities: entities.map((ctx) => {
+          const full = displayName(hass, ctx);
+          const name = tableRowName(hass, ctx, full, device, stripArea);
+          return name === full ? ctx.entity_id : { entity: ctx.entity_id, name };
+        }),
       };
     });
     return [{ type: "grid", cards: [title, ...compact(cards)] }];

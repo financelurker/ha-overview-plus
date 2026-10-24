@@ -370,3 +370,35 @@ test("the first entry of a default section counts, as in the editor", () => {
   const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
   assert.ok(headings(view).includes("Lights"));
 });
+
+test("table layout: rows without area and device name, as under the device's title", () => {
+  const TABLE = { override: { sections: [{ title: "Hypervisor", match: { label: "virt-hypervisor" }, layout: "table" }] } };
+  const rows = (view) => view.sections[0].cards[1].entities;
+
+  // with Home Assistant's split into device and entity name
+  const hass = hassWithNames();
+  hass.devices.dev_pve.name = "Proxmox pve1";
+  hass.entities["sensor.pve_cpu"].name = "CPU";
+  hass.entities["binary_sensor.pve_status"].name = "Proxmox Status";
+  const view = generateAreaView(hass, "proxmox", TABLE).view;
+  assert.equal(view.sections[0].cards[1].title, "pve1");
+  assert.deepEqual(rows(view).slice(0, 2), [{ entity: "sensor.pve_cpu", name: "CPU" }, { entity: "binary_sensor.pve_status", name: "Status" }]);
+  // the device's main entity (no name of its own) keeps the device name
+  hass.entities["sensor.pve_uptime"].name = null;
+  hass.entities["sensor.pve_uptime"].entity_category = undefined;
+  const main = rows(generateAreaView(hass, "proxmox", TABLE).view).find((r) => (r.entity ?? r) === "sensor.pve_uptime");
+  assert.deepEqual(main, { entity: "sensor.pve_uptime", name: "pve1" }, "nothing of its own to show: the device name without the area");
+
+  // only friendly names, e.g. "Storeroom Freezer Sensor Temperature"
+  const plain = makeHass();
+  plain.devices.dev_pve.name = "Proxmox pve1";
+  plain.states["sensor.pve_cpu"].attributes.friendly_name = "Proxmox pve1 CPU load";
+  plain.states["sensor.pve_uptime"].attributes.friendly_name = "Uptime";
+  const fallback = generateAreaView(plain, "proxmox", TABLE).view;
+  assert.deepEqual(rows(fallback)[0], { entity: "sensor.pve_cpu", name: "CPU load" });
+  assert.ok(rows(fallback).includes("sensor.pve_uptime"), "names without area or device stay as they are");
+
+  // the device name is removed also when area names are kept elsewhere
+  const kept = generateAreaView(plain, "proxmox", { ...TABLE, strip_area_names: false }).view;
+  assert.deepEqual(rows(kept)[0], { entity: "sensor.pve_cpu", name: "CPU load" });
+});
