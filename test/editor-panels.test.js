@@ -33,3 +33,54 @@ test("collapsing a nested panel does not collapse its top-level part", () => {
   editor.setConfig({ ...config });
   assert.equal(top().expanded, false);
 });
+
+test("lazy building: a part's content is built when it is expanded the first time", () => {
+  const editor = document.createElement(EDITOR_TAG);
+  document.body.appendChild(editor);
+  editor.hass = makeHass();
+  editor.setConfig({
+    type: "custom:overview-plus",
+    card_rules: [{ match: { domain: "light" }, card: { type: "tile" } }],
+    area_overrides: {
+      proxmox: { sections: [{ title: "A", match: { label: "a" } }, { title: "B", match: { label: "b" } }] },
+      living_room: { sections: [{ title: "C", match: { label: "c" } }] },
+    },
+  });
+  const root = editor.shadowRoot;
+  const forms = (scope) => scope.querySelectorAll("ha-form").length;
+  assert.equal(forms(root), 0, "nothing but the three headers when the editor opens");
+  assert.match(root.querySelector(".top-areas").secondary, /2 areas/, "summaries are there without building");
+
+  const areas = root.querySelector(".top-areas");
+  areas.toggle(true);
+  const panels = [...areas.querySelectorAll(".area-panel")];
+  assert.equal(panels.length, 2, "one block per area");
+  assert.equal(forms(areas), 1, "only the 'add area' picker: the area blocks are collapsed");
+  panels[0].toggle(true);
+  const sections = [...panels[0].querySelectorAll(".sections > ha-expansion-panel")];
+  assert.equal(sections.length, 2, "section headers are there");
+  assert.equal(forms(sections[0]), 0, "a collapsed section has no form yet");
+  sections[0].toggle(true);
+  assert.ok(forms(sections[0]) > 0, "built when expanded");
+  // expanding again does not build twice
+  sections[0].toggle(false);
+  sections[0].toggle(true);
+  assert.equal(sections[0].querySelectorAll(":scope > .panel-body > ha-form").length, 1);
+  assert.equal(forms(root.querySelector(".top-general")), 0, "other parts stay unbuilt");
+});
+
+test("a closed editor drops its content and builds it again when added back", () => {
+  const editor = document.createElement(EDITOR_TAG);
+  document.body.appendChild(editor);
+  editor.hass = makeHass();
+  editor.setConfig({ type: "custom:overview-plus", area_overrides: { proxmox: { sections: [{ title: "A", match: { label: "a" } }] } } });
+  editor.shadowRoot.querySelector(".top-areas").toggle(true);
+  editor.remove();
+  assert.equal(editor.shadowRoot.childElementCount, 0, "nothing kept while closed");
+  document.body.appendChild(editor);
+  const areas = editor.shadowRoot.querySelector(".top-areas");
+  assert.ok(areas, "built again");
+  assert.equal(areas.expanded, true, "with the parts that were open");
+  assert.ok(areas.querySelector(".area-panel"));
+  editor.remove();
+});

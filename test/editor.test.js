@@ -17,6 +17,8 @@ const { EDITOR_TAG } = await import("../src/editor/editor.js");
 
 function setup(config) {
   const editor = document.createElement(EDITOR_TAG);
+  // every field at once: these tests do not expand the parts first (lazy building: own tests)
+  editor._lazy = false;
   document.body.appendChild(editor);
   const events = [];
   editor.addEventListener("config-changed", (ev) => events.push(ev.detail.config));
