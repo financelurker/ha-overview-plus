@@ -65,6 +65,8 @@ export function lazifyView(view, eager = EAGER_CARDS) {
       const wrapped = { type: LAZY_TYPE, card };
       // Home Assistant reads grid_options from the card config it knows about
       if (card.grid_options) wrapped.grid_options = card.grid_options;
+      // … and the visibility conditions (e.g. "hide while off" of a section)
+      if (card.visibility) wrapped.visibility = card.visibility;
       return wrapped;
     }),
   }));

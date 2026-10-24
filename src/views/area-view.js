@@ -37,6 +37,7 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
  * @property {string[]} [include_categories]   default: ["none", "diagnostic"]
  * @property {string[]} [exclude_device_classes]
  * @property {string[]} [exclude]               entity ids
+ * @property {HideRule[] | string[]} [hide_states]  hide an entity's card while it is in one of these states (live)
  */
 
 /**
@@ -213,6 +214,88 @@ function groupByDevice(entities) {
     groups.set("", rest);
   }
   return groups;
+}
+
+/**
+ * @typedef {Object} HideRule
+ * @property {string | string[]} [domain]        none: every entity of the section
+ * @property {string | string[]} [device_class]  optional, narrows the rule
+ * @property {any} states                        hidden while the state is one of these
+ */
+
+/** YAML 1.1 reads an unquoted off / on as false / true. @param {any} v */
+const stateText = (v) => (v === true ? "on" : v === false ? "off" : String(v));
+
+/** @param {any} v @returns {any[]} */
+const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === "" ? [] : [v]);
+
+/**
+ * The hide rules of a section (`entities.hide_states`): a list of rules, or – short form –
+ * a list of states for every entity.
+ * @param {EntitySelection | undefined} sel
+ * @returns {{ domains: string[], deviceClasses: string[], states: string[] }[]}
+ */
+export function hideRulesOf(sel) {
+  const raw = asList(sel?.hide_states);
+  const isRule = (/** @type {any} */ r) => r && typeof r === "object" && !Array.isArray(r);
+  // Plain states (also mixed with rules) form one rule for every entity
+  const plain = raw.filter((r) => !isRule(r) && r !== null && r !== undefined).map(stateText).filter(Boolean);
+  return [
+    ...(plain.length ? [{ domains: [], deviceClasses: [], states: plain }] : []),
+    ...raw.filter(isRule)
+    .map((r) => ({
+      domains: asList(r.domain).map(String),
+      deviceClasses: asList(r.device_class).map(String),
+      states: asList(r.states ?? r.state).map(stateText).filter(Boolean),
+    }))
+    .filter((r) => r.states.length),
+  ];
+}
+
+/**
+ * States in which an entity's card is hidden: those of all rules that fit it.
+ * @param {ReturnType<typeof hideRulesOf>} rules
+ * @param {EntityContext} ctx
+ * @returns {string[]}
+ */
+function hiddenStates(rules, ctx) {
+  const states = new Set();
+  for (const rule of rules) {
+    if (rule.domains.length && !rule.domains.includes(ctx.domain)) continue;
+    if (rule.deviceClasses.length && !rule.deviceClasses.includes(deviceClass(ctx))) continue;
+    for (const st of rule.states) states.add(st);
+  }
+  return [...states];
+}
+
+/**
+ * Visibility condition "shown while one of these entities is not in a hidden state";
+ * undefined if one of them is never hidden. Evaluated live by Home Assistant, so cards
+ * come back as soon as the state changes.
+ * @param {ReturnType<typeof hideRulesOf>} rules
+ * @param {EntityContext[]} list
+ */
+function shownWhile(rules, list) {
+  if (!rules.length || !list.length) return undefined;
+  const conditions = [];
+  for (const ctx of list) {
+    const states = hiddenStates(rules, ctx);
+    if (!states.length) return undefined;
+    conditions.push({ condition: "state", entity: ctx.entity_id, state_not: states });
+  }
+  return conditions.length === 1 ? conditions[0] : { condition: "or", conditions };
+}
+
+/**
+ * Add the visibility condition to a card or section (kept with existing ones).
+ * @param {Record<string, any> | null | undefined} target
+ * @param {ReturnType<typeof hideRulesOf>} rules
+ * @param {EntityContext[]} list the entities whose states decide
+ */
+function hideWhile(target, rules, list) {
+  const condition = target ? shownWhile(rules, list) : undefined;
+  if (!target || !condition) return target;
+  return { ...target, visibility: [...asList(target.visibility), condition] };
 }
 
 /**
@@ -547,65 +630,93 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
   if (!shown.length) return [];
   const layout = section.layout ?? "tiles";
   const title = headingCard(section.title ?? "", section.icon, tapAction ? { tap_action: tapAction } : {});
+  // "Hide while in state …": every card, and a heading or section with nothing left to show
+  const rules = hideRulesOf(section.entities);
+  /** @param {Record<string, any> | null | undefined} target @param {EntityContext[]} list */
+  const hide = (target, list) => hideWhile(target, rules, list);
 
   if (layout === "tiles") {
-    return [{ type: "grid", cards: [title, ...compact(shown.map((ctx) => card(factory, ctx)))] }];
+    // only entities that have a card decide whether the section is shown
+    const built = shown.map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
+    return [hide({ type: "grid", cards: [title, ...built.map(([ctx, c]) => hide(c, [ctx]))] }, built.map(([ctx]) => ctx))];
   }
 
   const groups = [...groupByDevice(shown)];
 
   if (layout === "devices") {
-    return [
-      { type: "grid", column_span: 3, cards: [{ ...title, heading_style: "title" }] },
-      ...groups.flatMap(([deviceId, entities]) => {
-        const device = deviceId ? hass.devices?.[deviceId] : undefined;
-        const custom = device ? factory.device(device, entities) : undefined;
-        if (custom === null) return [];
-        return [{
-          type: "grid",
-          cards: [
-            headingCard(device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
-              heading_style: "subtitle",
-              tap_action: deviceTapAction(hass, device),
-            }),
-            ...(custom ? [custom] : compact(entities.map((ctx) => card(factory, ctx, { name: { type: "entity" } })))),
-          ],
-        }];
-      }),
-    ];
+    /** @type {EntityContext[]} entities that have a card: they decide whether the title is shown */
+    const deciding = [];
+    const blocks = groups.flatMap(([deviceId, entities]) => {
+      const device = deviceId ? hass.devices?.[deviceId] : undefined;
+      const custom = device ? factory.device(device, entities) : undefined;
+      if (custom === null) return [];
+      const built = custom
+        ? [/** @type {[EntityContext[], any]} */ ([entities, custom])]
+        : entities.map((ctx) => /** @type {[EntityContext[], any]} */ ([[ctx], card(factory, ctx, { name: { type: "entity" } })])).filter(([, c]) => c);
+      if (!built.length) return [];
+      const own = built.flatMap(([list]) => list);
+      deciding.push(...own);
+      return [hide({
+        type: "grid",
+        cards: [
+          headingCard(device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"), undefined, {
+            heading_style: "subtitle",
+            tap_action: deviceTapAction(hass, device),
+          }),
+          ...built.map(([list, c]) => hide(c, list)),
+        ],
+      }, own)];
+    });
+    return [hide({ type: "grid", column_span: 3, cards: [{ ...title, heading_style: "title" }] }, deciding), ...blocks];
   }
 
   if (layout === "table") {
     const cards = groups.map(([deviceId, entities]) => {
       const device = deviceId ? hass.devices?.[deviceId] : undefined;
       const custom = device ? factory.device(device, entities) : undefined;
-      if (custom !== undefined) return custom;
-      return {
+      if (custom !== undefined) return hide(custom, entities);
+      return hide({
         type: "entities",
         title: device ? stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device") : t(hass, "others"),
         // The card's title names the device: rows without area and device name
         entities: entities.map((ctx) => {
           const full = displayName(hass, ctx);
           const name = tableRowName(hass, ctx, full, device, stripArea);
-          return name === full ? ctx.entity_id : { entity: ctx.entity_id, name };
+          const row = name === full ? ctx.entity_id : { entity: ctx.entity_id, name };
+          // a row of a hidden state disappears, the others stay
+          const condition = shownWhile(rules, [ctx]);
+          return condition ? { type: "conditional", conditions: [condition], row: typeof row === "string" ? { entity: row } : row } : row;
         }),
-      };
+      }, entities);
     });
-    return [{ type: "grid", cards: [title, ...compact(cards)] }];
+    return [hide({ type: "grid", cards: [title, ...compact(cards)] }, shown)];
   }
 
   // compact: one card per device, showing its primary entity
+  /** @type {EntityContext[]} the entities whose states decide whether the cards are shown */
+  const deciding = [];
   const cards = groups.flatMap(([deviceId, entities]) => {
     const device = deviceId ? hass.devices?.[deviceId] : undefined;
-    if (!device) return entities.map((ctx) => card(factory, ctx));
+    if (!device) {
+      const built = entities.map((ctx) => /** @type {[EntityContext, any]} */ ([ctx, card(factory, ctx)])).filter(([, c]) => c);
+      deciding.push(...built.map(([ctx]) => ctx));
+      return built.map(([ctx, c]) => hide(c, [ctx]));
+    }
     const custom = factory.device(device, entities);
-    if (custom !== undefined) return [custom];
+    if (custom !== undefined) {
+      if (custom) deciding.push(...entities);
+      return [hide(custom, entities)];
+    }
     const primary = primaryEntity(entities, section.primary);
     if (!primary) return [];
-    return [card(factory, primary, {
+    const tile = card(factory, primary, {
       name: stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device"),
       ...(hass.user?.is_admin ? { tap_action: navigate(`/config/devices/device/${device.id}`) } : {}),
-    })];
+    });
+    if (!tile) return [];
+    deciding.push(primary);
+    return [hide(tile, [primary])];
   });
-  return [{ type: "grid", cards: [title, ...compact(cards)] }];
+  // the section disappears when none of its cards is left
+  return [hide({ type: "grid", cards: [title, ...compact(cards)] }, deciding)];
 }

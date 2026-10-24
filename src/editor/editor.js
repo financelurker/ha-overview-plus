@@ -86,6 +86,9 @@ const STYLE = `
   .delete-icon { color: var(--error-color, #db4437); }
   .col-empty { display: inline-block; width: 48px; height: 1px; flex: none; }
   .section-icon { display: inline-block; min-width: 24px; min-height: 24px; }
+  .hide-rule { display: flex; align-items: flex-start; gap: 4px; }
+  .hide-rule ha-form { flex: 1; min-width: 0; }
+  .hide-rules { margin-top: 8px; }
   .off .section-icon { opacity: 0.5; }
   .item-row .secondary { display: block; font-size: 12px; font-weight: normal; color: var(--secondary-text-color); }
   .confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; box-sizing: border-box;
@@ -183,6 +186,8 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     this._openSections = new Map();
     /** @type {Set<string>} area ids whose "tile on the overview page" block is expanded */
     this._openTiles = new Set();
+    /** @type {WeakSet<any>} sections whose "hide while in state" block is expanded */
+    this._openHideRules = new WeakSet();
     /** @type {Set<number>} indexes of expanded card rule blocks */
     this._openRules = new Set();
     /** @type {Set<number>} indexes of expanded shortcut blocks */
@@ -1394,11 +1399,14 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       const form = this._haForm(sectionSchema(this._ctx(), this._opts, section), clone(section), (v) => {
         const before = sectionShape(section);
         const hidden = section.hidden;
+        const hideRules = section.hide_rules;
         for (const key of Object.keys(section)) delete section[key];
         Object.assign(section, v);
-        // shown/hidden is set by the switch in the header, not by the form
+        // shown/hidden is set by the switch in the header, the hide rules by their own rows
         if (hidden) section.hidden = true;
         else delete section.hidden;
+        if (hideRules) section.hide_rules = hideRules;
+        else delete section.hide_rules;
         if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
         refresh();
         this._emit();
@@ -1414,7 +1422,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
         refreshAreaHeader();
         this._emit();
       }));
-      panel.body.append(form, row);
+      panel.body.append(form, this._hideRulesBlock(section), row);
       container.appendChild(panel.root);
     });
   }
@@ -1437,6 +1445,90 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       entry.sections = own;
     }
     this._openSections.set(entry.area, new Set(openSections.map((s) => entry.sections.indexOf(s)).filter((i) => i >= 0)));
+  }
+
+  /**
+   * "Hide while in state": rules of an own section, one row each – domain, optional
+   * device class, states. Their cards are hidden live while the state is one of these.
+   * @param {any} section
+   */
+  _hideRulesBlock(section) {
+    const rules = /** @type {any[]} */ (section.hide_rules ||= []);
+    const summary = () => {
+      const n = rules.filter((r) => r.states?.length).length;
+      return n ? this._t(n === 1 ? "editor_hide_rules_one" : "editor_hide_rules_n", { n: String(n) }) : "";
+    };
+    const panel = this._panel(this._t("editor_hide_states"), summary(), this._openHideRules.has(section), (open) => {
+      if (open) this._openHideRules.add(section);
+      else this._openHideRules.delete(section);
+    });
+    panel.root.classList.add("hide-rules");
+    const list = document.createElement("div");
+    list.className = "list";
+    const changed = () => {
+      panel.setHeader(this._t("editor_hide_states"), summary());
+      this._emit();
+    };
+    const domains = this._opts?.domains || [];
+    const deviceClasses = (this._opts?.deviceClasses || []).filter((/** @type {any} */ o) => o.value !== "none");
+    // States to suggest: the usual ones and the non-numeric states of the chosen domains
+    /** @type {Map<string, Set<string>>} */
+    const byDomain = new Map();
+    for (const st of /** @type {any[]} */ (Object.values(this._hass?.states || {}))) {
+      const value = String(st.state ?? "");
+      if (!value || !Number.isNaN(Number(value))) continue;
+      const domain = String(st.entity_id).split(".")[0];
+      if (!byDomain.has(domain)) byDomain.set(domain, new Set());
+      byDomain.get(domain)?.add(value);
+    }
+    /** @param {string[]} domains */
+    const stateOptions = (domains) => {
+      const seen = new Set(["off", "on", "unavailable", "unknown"]);
+      for (const domain of domains) for (const value of byDomain.get(domain) || []) if (seen.size < 40) seen.add(value);
+      return [...seen].map((value) => ({ value, label: value }));
+    };
+    /** @param {any} rule */
+    const schema = (rule) => [
+      { name: "", type: "grid", schema: [
+        { name: "hr_domain", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: domains } } },
+        { name: "hr_device_class", selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: deviceClasses } } },
+      ] },
+      { name: "hr_states", required: true, selector: { select: { mode: "dropdown", multiple: true, custom_value: true, options: stateOptions(rule.domain || []) } } },
+    ];
+    const render = () => {
+      list.replaceChildren();
+      rules.forEach((rule, index) => {
+        const row = document.createElement("div");
+        row.className = "hide-rule";
+        const form = this._haForm(schema(rule), { hr_domain: rule.domain || [], hr_device_class: rule.device_class || [], hr_states: rule.states || [] }, (v) => {
+          const domainChanged = JSON.stringify(v.hr_domain || []) !== JSON.stringify(rule.domain || []);
+          rule.domain = (v.hr_domain || []).filter(Boolean);
+          rule.device_class = (v.hr_device_class || []).filter(Boolean);
+          rule.states = (v.hr_states || []).filter(Boolean);
+          if (domainChanged) form.schema = schema(rule);
+          changed();
+        });
+        const remove = this._iconButton(ICON.delete, this._t("editor_delete_hide_rule"), () => {
+          rules.splice(index, 1);
+          render();
+          changed();
+        });
+        remove.classList.add("delete-icon");
+        row.append(form, remove);
+        list.append(row);
+      });
+    };
+    render();
+    const actions = document.createElement("div");
+    actions.className = "row left";
+    actions.append(this._button(this._t("editor_add_hide_rule"), () => {
+      rules.push({ domain: [], device_class: [], states: [] });
+      this._openHideRules.add(section);
+      render();
+      // nothing to emit yet: a rule without states is not saved
+    }));
+    panel.body.append(this._hint("editor_hide_states_help"), list, actions);
+    return panel.root;
   }
 
   /**

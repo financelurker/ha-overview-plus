@@ -402,3 +402,69 @@ test("table layout: rows without area and device name, as under the device's tit
   const kept = generateAreaView(plain, "proxmox", { ...TABLE, strip_area_names: false }).view;
   assert.deepEqual(rows(kept)[0], { entity: "sensor.pve_cpu", name: "CPU load" });
 });
+
+test("hide_states: cards are hidden live while their entity is in a listed state, per domain and device class", () => {
+  const sections = [{
+    title: "Mixed", match: { entity: ["media_player.tv", "switch.plug", "sensor.living_temp", "sensor.living_hum"] },
+    entities: { hide_states: [
+      { domain: "media_player", states: ["off", "standby"] },
+      { domain: "sensor", device_class: "humidity", states: ["unavailable"] },
+      { domain: "switch", states: [false] },                       // YAML: unquoted off
+    ] },
+  }];
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { sections } });
+  const section = view.sections.find((s) => s.cards[0]?.heading === "Mixed");
+  const vis = (id) => section.cards.find((c) => c.entity === id)?.visibility;
+  assert.deepEqual(vis("media_player.tv"), [{ condition: "state", entity: "media_player.tv", state_not: ["off", "standby"] }]);
+  assert.deepEqual(vis("switch.plug"), [{ condition: "state", entity: "switch.plug", state_not: ["off"] }]);
+  assert.deepEqual(vis("sensor.living_hum"), [{ condition: "state", entity: "sensor.living_hum", state_not: ["unavailable"] }]);
+  assert.equal(vis("sensor.living_temp"), undefined, "the rule's device class does not fit: never hidden");
+  assert.equal(section.visibility, undefined, "one card is always shown: the section stays");
+});
+
+test("hide_states: a section, device heading or table row with nothing left to show disappears", () => {
+  const rule = { hide_states: [{ domain: "binary_sensor", device_class: "running", states: ["off"] }] };
+  const match = { label: "virt-guest" };
+  const tiles = generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match, entities: { ...rule, include_domains: ["binary_sensor"] } }] } }).view;
+  assert.deepEqual(tiles.sections[0].visibility, [{ condition: "or", conditions: [
+    { condition: "state", entity: "binary_sensor.vm_web_status", state_not: ["off"] },
+    { condition: "state", entity: "binary_sensor.vm_db_status", state_not: ["off"] },
+  ] }]);
+
+  const devices = generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match, layout: "devices", entities: { ...rule, include_domains: ["binary_sensor"] } }] } }).view;
+  const web = devices.sections.find((s) => s.cards[0]?.heading === "web");
+  assert.deepEqual(web.visibility, [{ condition: "state", entity: "binary_sensor.vm_web_status", state_not: ["off"] }]);
+
+  const table = generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match, layout: "table", entities: rule }] } }).view;
+  const rows = table.sections[0].cards[1].entities;
+  assert.deepEqual(rows.find((r) => r.type === "conditional").conditions, [{ condition: "state", entity: "binary_sensor.vm_web_status", state_not: ["off"] }]);
+  assert.ok(rows.includes("sensor.vm_web_cpu"), "other rows stay plain");
+  assert.equal(table.sections[0].cards[1].visibility, undefined, "the CPU sensor is always shown: the card stays");
+
+  const compact = generateAreaView(makeHass(), "proxmox", { override: { sections: [{ title: "VMs", match, layout: "compact", entities: rule }] } }).view;
+  assert.equal(compact.sections[0].visibility[0].condition, "or", "all primary entities can be hidden: so can the section");
+});
+
+test("hide_states short form: a list of states for every entity; nothing set: no conditions", () => {
+  const short = generateAreaView(makeHass(), "living_room", { override: { sections: [{ title: "T", match: { entity: "switch.plug" }, entities: { hide_states: ["off", "unavailable"] } }] } }).view;
+  assert.deepEqual(short.sections[0].cards[1].visibility, [{ condition: "state", entity: "switch.plug", state_not: ["off", "unavailable"] }]);
+  const none = generateAreaView(makeHass(), "living_room", { override: { sections: [MULTIMEDIA] } }).view;
+  assert.ok(none.sections.every((s) => !s.visibility && s.cards.every((c) => !c.visibility)));
+});
+
+test("hide_states: only entities that have a card decide; plain states mixed with rules apply to all", () => {
+  // a card rule hides the switch: the section depends on the TV only
+  const rules = [{ match: { entity: "switch.plug" }, card: false }];
+  const sections = [{ title: "M", match: { entity: ["media_player.tv", "switch.plug"] }, entities: { hide_states: [{ domain: "media_player", states: ["off"] }] } }];
+  const { view } = generateAreaView(makeHass(), "living_room", { card_rules: rules, override: { sections } });
+  assert.deepEqual(view.sections[0].visibility, [{ condition: "state", entity: "media_player.tv", state_not: ["off"] }]);
+  // existing visibility of a card rule (also a single object) is kept
+  const vis = { condition: "screen", media_query: "(min-width: 0px)" };
+  const kept = generateAreaView(makeHass(), "living_room", {
+    card_rules: [{ match: { entity: "media_player.tv" }, card: { visibility: vis } }],
+    override: { sections: [{ title: "M", match: { entity: "media_player.tv" }, entities: { hide_states: ["off", { domain: "switch", states: ["on"] }] } }] },
+  }).view;
+  const tv = kept.sections[0].cards[1];
+  assert.equal(tv.visibility.length, 2);
+  assert.deepEqual(tv.visibility[1], { condition: "state", entity: "media_player.tv", state_not: ["off"] });
+});

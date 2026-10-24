@@ -30,3 +30,18 @@ test("own settings: only those of the config", async () => {
   const s = await overviewOf({ load_home_settings: false, favorite_entities: ["light.lamp"] });
   assert.deepEqual(s.favorite_entities, ["light.lamp"]);
 });
+
+test("lazy rendering keeps the visibility conditions on the wrapper", async () => {
+  const { lazifyView } = await import("../src/lazy-card.js");
+  const visibility = [{ condition: "state", entity: "switch.x", state_not: ["off"] }];
+  const before = globalThis.customElements;
+  globalThis.customElements = /** @type {any} */ ({ get: () => true }); // every card type "defined"
+  try {
+    const view = lazifyView({ sections: [{ cards: [{ type: "heading" }, { type: "tile", entity: "switch.x", visibility }] }] }, 0);
+    const card = view.sections[0].cards[1];
+    assert.notEqual(card.type, "tile", "the card is wrapped");
+    assert.deepEqual(card.visibility, visibility);
+  } finally {
+    globalThis.customElements = before;
+  }
+});
