@@ -52,7 +52,7 @@ import { areaEntities, deviceClass, deviceName, displayName, entityCategory, str
 /**
  * @typedef {Object} AreaOverride
  * @property {OverrideSection[]} [sections]
- * @property {boolean} [show_default_sections]   default false: keep the standard categories
+ * @property {boolean} [show_default_sections]   default false; true: show the standard categories before the own sections
  * @property {boolean} [show_other_devices]      default true
  * @property {boolean} [show_automations]        default true
  * @property {string[] | false} [badges]         entity ids shown as badges; false = none
@@ -312,6 +312,11 @@ export function generateAreaView(hass, areaId, options = {}) {
     const { light, climate, security, media_players: media } = bySummary;
 
     if (light.length) {
+      // The buttons switch the lights of the section: the whole area, unless own sections
+      // took some of its lights – then only the lights shown here
+      const lightTarget = light.length === findEntities(all, SUMMARY_FILTERS.light).length
+        ? { area_id: areaId }
+        : { entity_id: light.map((ctx) => ctx.entity_id) };
       const anyOn = {
         condition: "or",
         conditions: light.map((ctx) => ({ condition: "state", entity: ctx.entity_id, state: "on" })),
@@ -324,12 +329,12 @@ export function generateAreaView(hass, areaId, options = {}) {
             badges: [
               {
                 type: "button", icon: "mdi:power", text: t(hass, "light_off"),
-                tap_action: { action: "perform-action", perform_action: "light.turn_on", target: { area_id: areaId } },
+                tap_action: { action: "perform-action", perform_action: "light.turn_on", target: lightTarget },
                 visibility: [{ condition: "not", conditions: [anyOn] }],
               },
               {
                 type: "button", icon: "mdi:power", color: "orange", text: t(hass, "light_on"),
-                tap_action: { action: "perform-action", perform_action: "light.turn_off", target: { area_id: areaId } },
+                tap_action: { action: "perform-action", perform_action: "light.turn_off", target: lightTarget },
                 visibility: [anyOn],
               },
             ],
@@ -373,7 +378,8 @@ export function generateAreaView(hass, areaId, options = {}) {
   sections.push(...ownSections);
 
   // ------------------------------------------------------ remaining devices
-  const automations = all.filter(simpleFilter({ domain: "automation", entity_category: "none" }));
+  // Automations an own section already shows are not repeated
+  const automations = all.filter((ctx) => !consumed.has(ctx.entity_id)).filter(simpleFilter({ domain: "automation", entity_category: "none" }));
   for (const ctx of automations) consumed.add(ctx.entity_id);
 
   if (override?.show_other_devices !== false) {

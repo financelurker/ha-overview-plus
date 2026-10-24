@@ -52,7 +52,7 @@ export const insideDialog = (ev) => ev.composedPath().some((el) => /** @type {an
 export function openDialog({ title, closeLabel, buttons = [], style = "", onClose }) {
   const host = document.createElement(TAG);
   const root = host.attachShadow({ mode: "open" });
-  root.innerHTML = `<style>${STYLE}${style}</style><dialog><header><span class="title"></span></header><div class="content"></div></dialog>`;
+  root.innerHTML = `<style>${STYLE}${style}</style><dialog aria-labelledby="title"><header><span class="title" id="title"></span></header><div class="content"></div></dialog>`;
   const dialog = /** @type {HTMLDialogElement} */ (root.querySelector("dialog"));
   const header = /** @type {HTMLElement} */ (root.querySelector("header"));
   /** @type {HTMLElement} */ (root.querySelector(".title")).textContent = title;
@@ -75,7 +75,7 @@ export function openDialog({ title, closeLabel, buttons = [], style = "", onClos
     button.className = className;
     button.title = label;
     button.setAttribute("aria-label", label);
-    button.innerHTML = `<svg viewBox="0 0 24 24"><path d="${path}"/></svg>`;
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
     button.addEventListener("click", onClick);
     header.append(button);
   };

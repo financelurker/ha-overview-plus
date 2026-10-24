@@ -74,6 +74,8 @@ export function openDeviceList(hass, list) {
     ul.append(li);
   }
   content.append(ul);
+  // Start on the first device rather than on the close button
+  /** @type {HTMLElement | null} */ (ul.querySelector("button"))?.focus();
   return true;
 }
 

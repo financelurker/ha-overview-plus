@@ -322,3 +322,17 @@ test("own section heading: device page for one device, device list for several, 
   assert.equal(tap(makeHass(), "Lamp"), undefined);
   assert.equal(tap(makeHass({ user: { is_admin: false } }), "Multimedia"), undefined, "device pages are for admins");
 });
+
+test("own sections and default sections: automations and lights are not doubled", () => {
+  const sections = [{ title: "Mine", match: { entity: ["automation.evening", "light.lamp"] } }];
+  const { view } = generateAreaView(makeHass(), "living_room", { override: { show_default_sections: true, sections } });
+  const ids = cards(view).map((c) => c.entity);
+  assert.equal(ids.filter((e) => e === "automation.evening").length, 1, "automation shown once");
+  assert.ok(!headings(view).includes("Automations"));
+  // the light buttons switch only the lights of the category, not the one in "Mine"
+  const lights = view.sections.find((s) => s.cards[0].heading === "Lights");
+  assert.deepEqual(lights.cards[0].badges[0].tap_action.target, { entity_id: ["light.ceiling"] });
+  // without own lights the whole area is switched, as in the built-in view
+  const plain = generateAreaView(makeHass(), "living_room").view;
+  assert.deepEqual(plain.sections[0].cards[0].badges[0].tap_action.target, { area_id: "living_room" });
+});
