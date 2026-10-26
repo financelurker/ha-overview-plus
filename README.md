@@ -40,7 +40,7 @@ itself: new devices and areas appear without editing the dashboard.
   set it up in the dashboard's editor, with dropdowns filled from your installation.
 
 **A normal room keeps its default sections and gains one of its own:** all power plugs of the living
-room in one section, selected by a label.
+room in one section, selected by label.
 
 <table>
 <tr>

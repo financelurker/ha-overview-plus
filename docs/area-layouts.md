@@ -66,14 +66,13 @@ while a *Living room* keeps the default view and gains e.g. a section with all i
 ```yaml
       show_default_sections: true
       sections:
-        - default: light               # light, climate, security, media_players, scenes
-        - default: climate
         - title: Power plugs
           icon: mdi:power-socket-eu
           match: { label: power_plug }
 ```
 
-- Standard categories the list does not name come first. Without
+- The standard categories come first. A `- default: <category>` entry (`light`, `climate`,
+  `security`, `media_players`, `scenes`) places that category in the list instead. Without
   `show_default_sections` the `default` entries are ignored (the editor removes them when the option is
   switched off).
 - Any section, own or default, can be hidden with `hidden: true` (e.g. `- { default: scenes, hidden: true }`).
