@@ -397,17 +397,17 @@ export function generateAreaView(hass, areaId, options = {}) {
   /** @type {Record<string, any>} */
   const report = { area: areaId, override: hasOverride, sections: [], hidden: [] };
 
-  /**
-   * @param {ReturnType<typeof createCardFactory>} factory
-   * @param {EntityContext} ctx
-   * @param {Record<string, any>} [extra]
-   */
   const stripNames = options.strip_area_names !== false;
   /** @param {string} key */
   const pageAction = (key) => {
     const path = summaryPage(hass, options.summary_pages, key, true);
     return path ? navigate(path) : undefined;
   };
+  /**
+   * @param {ReturnType<typeof createCardFactory>} factory
+   * @param {EntityContext} ctx
+   * @param {Record<string, any>} [extra]
+   */
   const card = (factory, ctx, extra = {}) => {
     /** @type {Record<string, any>} */
     const base = { ...defaultEntityCard(ctx), ...extra };
@@ -485,7 +485,6 @@ export function generateAreaView(hass, areaId, options = {}) {
   // what the own sections left; a hidden one takes nothing.
   const showCategories = !hasOverride || withDefaults;
   if (showCategories) {
-    /** @type {Set<string>} */
     // The first entry of a category counts, as for the order
     /** @type {Map<string, any>} */
     const firstEntry = new Map();

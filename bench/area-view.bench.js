@@ -2,16 +2,16 @@
 // Run: node bench/area-view.bench.js
 import { generateAreaView } from "../src/views/area-view.js";
 
-export function bigHass({ areas = 40, devicesPerArea = 15, entitiesPerDevice = 7, unassigned = 600 } = {}) {
+function bigHass({ areas = 40, devicesPerArea = 15, entitiesPerDevice = 7, unassigned = 600 } = {}) {
   const states = {}, entities = {}, devices = {}, areaReg = {};
   const domains = ["light", "sensor", "binary_sensor", "switch", "climate", "cover", "media_player", "button", "select", "number"];
   const classes = { sensor: ["temperature", "humidity", "battery", "power", undefined], binary_sensor: ["window", "door", "motion", "running"], cover: ["blind", "door"] };
   for (let a = 0; a < areas; a++) {
     const areaId = `area_${a}`;
-    areaReg[areaId] = { area_id: areaId, name: `Raum ${a}`, floor_id: "f", aliases: [] };
+    areaReg[areaId] = { area_id: areaId, name: `Room ${a}`, floor_id: "f", aliases: [] };
     for (let d = 0; d < devicesPerArea; d++) {
       const devId = `dev_${a}_${d}`;
-      devices[devId] = { id: devId, area_id: areaId, name: `Raum ${a} Gerät ${d}`, labels: d % 5 === 0 ? ["virt-guest"] : [], manufacturer: d % 2 ? "Proxmox" : "Shelly" };
+      devices[devId] = { id: devId, area_id: areaId, name: `Room ${a} Device ${d}`, labels: d % 5 === 0 ? ["virt-guest"] : [], manufacturer: d % 2 ? "Proxmox" : "Shelly" };
       for (let e = 0; e < entitiesPerDevice; e++) {
         const domain = domains[(d + e) % domains.length];
         const id = `${domain}.d${a}_${d}_${e}`;
@@ -34,7 +34,7 @@ export function bigHass({ areas = 40, devicesPerArea = 15, entitiesPerDevice = 7
 const RULES = [
   { match: { integration: "zha", domain: "climate" }, card: { type: "custom:bt" } },
   { match: { manufacturer: "^Proxmox$", domain: "sensor" }, card: { color: "green" } },
-  { match: { device_name: ["Gerät 1$", "Gerät 2$"] }, card: { name: "x" } },
+  { match: { device_name: ["Device 1$", "Device 2$"] }, card: { name: "x" } },
 ];
 const OVERRIDE = { sections: [
   { title: "VMs", match: { label: "virt-guest" }, layout: "compact" },
@@ -49,11 +49,9 @@ function time(label, fn, runs = 30) {
   console.log(`${label.padEnd(44)} median ${t[runs >> 1].toFixed(2)} ms   max ${t.at(-1).toFixed(2)} ms`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const hass = bigHass();
-  console.log(`${Object.keys(hass.states).length} entities, ${Object.keys(hass.devices).length} devices, ${Object.keys(hass.areas).length} areas`);
-  time("default area view", () => generateAreaView(hass, "area_3"));
-  time("default area view + card rules", () => generateAreaView(hass, "area_3", { card_rules: RULES }));
-  time("override area view + card rules", () => generateAreaView(hass, "area_3", { card_rules: RULES, override: OVERRIDE }));
-  time("all 40 area views (dashboard switch)", () => { for (let a = 0; a < 40; a++) generateAreaView(hass, `area_${a}`, { card_rules: RULES }); }, 5);
-}
+const hass = bigHass();
+console.log(`${Object.keys(hass.states).length} entities, ${Object.keys(hass.devices).length} devices, ${Object.keys(hass.areas).length} areas`);
+time("default area view", () => generateAreaView(hass, "area_3"));
+time("default area view + card rules", () => generateAreaView(hass, "area_3", { card_rules: RULES }));
+time("override area view + card rules", () => generateAreaView(hass, "area_3", { card_rules: RULES, override: OVERRIDE }));
+time("all 40 area views (dashboard switch)", () => { for (let a = 0; a < 40; a++) generateAreaView(hass, `area_${a}`, { card_rules: RULES }); }, 5);

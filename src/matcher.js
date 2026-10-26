@@ -29,12 +29,6 @@ import { deviceClass, deviceName, entityCategory } from "./registry.js";
 /** @typedef {import("./registry.js").EntityContext} EntityContext */
 /** @typedef {Record<string, any> | Record<string, any>[]} MatchSpec */
 
-export const MATCH_KEYS = [
-  "entity", "domain", "device_class", "integration", "entity_category",
-  "label", "entity_label", "device_label", "device",
-  "device_name", "manufacturer", "model", "area", "floor", "not",
-];
-
 /** @param {any} v @returns {any[]} */
 const list = (v) => (Array.isArray(v) ? v : [v]);
 

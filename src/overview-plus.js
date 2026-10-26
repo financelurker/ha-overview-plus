@@ -27,7 +27,7 @@ export const VERSION = "0.0.0";
 
 const LOG = "[overview-plus]";
 
-/** Keys handled by Overview Plus; everything else is passed to the built-in overview view. */
+/** Keys the dashboard strategy handles itself; everything else is passed to the overview view strategy. */
 const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug", "summary_pages", "area_indicators"];
 
 /** @type {readonly string[]} */
@@ -64,8 +64,8 @@ function cardStats(view) {
 }
 
 /**
- * Debug: time from generating the view until the browser has painted it
- * (two animation frames after the cards were created, measured from `start`).
+ * Debug: time from generating the view until it is rendered – until the number of card
+ * elements has not changed for 3 animation frames (at most 10 s), measured from `start`.
  * @param {string} area
  * @param {number} start
  */
@@ -74,8 +74,7 @@ function measureRender(area, start) {
   let lastCount = -1;
   let stable = 0;
   const tick = () => {
-    // The view is rendered once the number of card elements stops growing
-    const count = document.querySelector("home-assistant")?.shadowRoot ? countCards() : 0;
+    const count = countCards();
     stable = count === lastCount ? stable + 1 : 0;
     lastCount = count;
     if (stable >= 3 || performance.now() - start > 10000) {
@@ -316,10 +315,10 @@ for (const [tag, cls] of ELEMENTS) {
 
 // List the dashboard under "Community dashboards" in the "new dashboard" dialog
 // (see home-assistant/frontend src/data/lovelace_custom_strategies.ts).
-const registry = /** @type {any} */ (window);
-registry.customStrategies = registry.customStrategies || [];
-if (!registry.customStrategies.some((/** @type {any} */ s) => s.type === "overview-plus" && s.strategyType === "dashboard")) {
-  registry.customStrategies.push({
+const win = /** @type {any} */ (window);
+win.customStrategies = win.customStrategies || [];
+if (!win.customStrategies.some((/** @type {any} */ s) => s.type === "overview-plus" && s.strategyType === "dashboard")) {
+  win.customStrategies.push({
     type: "overview-plus",
     strategyType: "dashboard",
     name: "Overview Plus",

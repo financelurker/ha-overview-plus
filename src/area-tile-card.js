@@ -22,9 +22,6 @@
 import { entityAreaId, evaluateIndicators, indicatorColor, INDICATOR_PRESETS, prepareIndicators, watchedIndicators } from "./area-indicators.js";
 import { t } from "./i18n.js";
 
-/** Presets have translated names (indicator_<preset>). */
-const INDICATOR_KEYS = INDICATOR_PRESETS;
-
 /**
  * @typedef {Object} AreaCache
  * @property {any} entities
@@ -89,7 +86,6 @@ const STYLE = `
 
 /** @param {any} v @returns {any[]} */
 const list = (v) => (Array.isArray(v) ? v : v ? [v] : []);
-
 
 /** Defines the element; only in a browser (the module is also imported by generators). */
 function define() {
@@ -399,7 +395,7 @@ function define() {
       if (!active.length) return;
       const hass = this._hass;
       const name = (/** @type {any} */ i) =>
-        i.name || (i.key in INDICATOR_KEYS ? t(hass, `indicator_${i.key}`) : hass.states?.[i.entities[0]]?.attributes?.friendly_name || i.key);
+        i.name || (i.key in INDICATOR_PRESETS ? t(hass, `indicator_${i.key}`) : hass.states?.[i.entities[0]]?.attributes?.friendly_name || i.key);
       const tile = active.find((i) => i.style === "tile");
       if (tile) {
         const color = indicatorColor(tile.color) || "var(--primary-color)";
