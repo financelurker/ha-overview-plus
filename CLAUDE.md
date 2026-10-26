@@ -32,7 +32,7 @@ card is correct on the first render (no flicker from lazy-loaded built-in module
 - **Never import from Home Assistant frontend internals.** Use only what is available at runtime:
   `hass` (states, entities, devices, areas, floors, labels, `callWS`, `localize`) and standard card types.
 - Built-in behaviour is re-implemented, not copied. If code is ported from `home-assistant/frontend`
-  (Apache-2.0), keep a source reference in a comment and keep `NOTICE` up to date.
+  (Apache-2.0), keep a source reference in a comment.
 - All user-facing strings go through `src/i18n.js`.
 - Strategy code must never throw into the frontend: catch errors, log with the `[overview-plus]` prefix,
   and fall back to a sensible view.
