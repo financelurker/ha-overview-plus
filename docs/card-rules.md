@@ -2,8 +2,8 @@
 
 [← Back to the overview](../README.md)
 
-Card rules replace, adjust or hide the cards of selected entities or devices – on the overview page, in
-the area views, the media players view and the devices view. **Example:** in the default area view a rule
+Card rules replace, adjust or hide the cards of selected entities or devices – in the favorites on the
+overview page, the area views, the media players view and the devices view. **Example:** in the default area view a rule
 replaces the climate tile with a thermostat card.
 
 <table>

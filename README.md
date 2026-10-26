@@ -5,8 +5,8 @@
 [![CI](https://github.com/financelurker/ha-overview-plus/actions/workflows/ci.yml/badge.svg)](https://github.com/financelurker/ha-overview-plus/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/financelurker/ha-overview-plus)](https://github.com/financelurker/ha-overview-plus/blob/main/LICENSE)
 
-**The Home Assistant Overview, configurable.** Overview Plus is a dashboard strategy that builds the same
-dashboard as the built-in Overview – overview page, one view per area, media players and devices – and
+**The Home Assistant Overview, configurable.** Overview Plus is a dashboard strategy that builds a dashboard
+like the built-in Overview – overview page, one view per area, media players and devices – and
 lets you change what the built-in one does not let you change. It keeps up with your installation by
 itself: new devices and areas appear without editing the dashboard.
 
@@ -37,7 +37,7 @@ itself: new devices and areas appear without editing the dashboard.
 - **[Popup on tap](https://github.com/financelurker/ha-overview-plus/blob/main/docs/card-rules.md#popup-on-tap):**
   a card of your choice instead of the entity's info dialog.
 - **[Visual editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md):**
-  everything in the dashboard's editor, with dropdowns filled from your installation.
+  set it up in the dashboard's editor, with dropdowns filled from your installation.
 
 <table>
 <tr>
@@ -51,13 +51,11 @@ itself: new devices and areas appear without editing the dashboard.
 **It fits if**
 
 - you like the built-in Overview, but want to change parts of it: other cards for some entities, own
-  sections in some areas, the states of your rooms at a glance;
-- the dashboard should keep up with new devices and areas by itself;
-- you run Home Assistant 2026.10 or newer.
+  sections in some areas, the states of your rooms at a glance.
 
 **It does not fit if**
 
-- you want to place every card yourself – use a regular dashboard for that.
+- you want to place every card yourself.
 
 ## Installation
 
@@ -82,7 +80,7 @@ as type *Dashboard*.
 ## Getting started
 
 1. Settings → Dashboards → **Add dashboard** → *Community dashboards* → **Overview Plus**. Without
-   changes it shows the same as the built-in Overview.
+   configuration it looks like the built-in Overview.
 2. Open the dashboard → ✏️ (edit) to change it in the [editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md).
    Do not click **Take control** there: it turns the dashboard into a static copy that Overview Plus no
    longer updates.

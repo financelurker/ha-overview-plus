@@ -20,23 +20,15 @@ card names ("Server CPU load" → "CPU load"). [Card rules](card-rules.md) set t
 strategy:
   type: custom:overview-plus
   area_overrides:
-    proxmox:                         # area id
-      badges: false                  # or a list of entity ids; default: area temperature/humidity
+    server:                          # area id
+      badges: [binary_sensor.server_problem]   # false = none; default: area temperature/humidity
       sections:
-        - title: Hypervisor
+        - title: Host
           icon: mdi:server
-          match: { label: virt-hypervisor }
-          layout: devices
-        - title: VMs & containers
+          match: { label: host }
+        - title: Virtual machines
           icon: mdi:cube-outline
-          match: { label: virt-guest }
-          layout: compact
-          primary: { domain: binary_sensor, device_class: running }
-        - title: Exporter
-          icon: mdi:access-point-network
-          match: { integration: mqtt, manufacturer: Proxmox }
-          entities:
-            include_domains: [sensor, binary_sensor]
+          match: { label: vm }
       show_default_sections: false   # default
       show_other_devices: true       # default
       show_automations: true         # default
@@ -109,7 +101,8 @@ administrators; for other users the heading has no action.
 - `devices`: a heading per device with its entities.
 - `compact`: one tile per device showing its primary entity, named after the device, opening the
   device page. The primary entity is chosen by `primary` ([match spec](reference.md#match-specifications))
-  or automatically (running/connectivity/power sensor, switch, binary sensor, sensor).
+  or automatically (running/connectivity/power sensor, switch, binary sensor, sensor), e.g.
+  `primary: { domain: binary_sensor, device_class: running }`.
 - `table`: one entities card per device.
 
 ## Which entities
@@ -138,7 +131,8 @@ The states are the ones Home Assistant stores (`off`), not the translated text (
 `sort` orders the entities of a section group by group – each in the first group it fits, the rest after
 them; without `sort`, and within a group, Home Assistant's order applies as in the built-in Overview. A
 group has a `domain`, a `device_class` or both (one value or a list); a plain string is a domain. In
-layouts by device, devices keep their order and `sort` applies within each device:
+the `devices` and `table` layouts, devices keep their order and `sort` applies within each device;
+`compact` ignores it:
 
 ```yaml
           sort:
@@ -177,8 +171,8 @@ card:
 
 ```yaml
       tile:
-        entities: [sensor.pve_cpu, sensor.pve_memory]   # shown in this order
-        show_names: true                                 # "CPU 12 % · RAM 41 %"
-        alert_entities: [binary_sensor.vm_db_running]    # badge while one of them is on
+        entities: [sensor.server_cpu_load, sensor.server_memory_used]   # shown in this order: "23% · 61%"
+        show_names: true                                 # with the entity names
+        alert_entities: [binary_sensor.server_problem]   # badge while one of them is on
         alert_classes: [problem]
 ```

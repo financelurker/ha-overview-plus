@@ -5,7 +5,7 @@
 The first page of the dashboard: welcome message, favorites and suggested entities, then one tile per
 area, grouped by floor; on the right the summaries (repairs, updates, lights, media players,
 maintenance, weather …) and shortcuts. The screenshots show the Home Assistant demo integration: occupied
-rooms are tinted, chips show heating, lights and an open window ([area states](area-states.md)); the
+rooms are tinted, chips show heating, cooling, lights and an open window ([area states](area-states.md)); the
 *Server* tile shows CPU and memory instead of the temperature ([tile](area-layouts.md#tile-on-the-overview-page)).
 
 <table>
@@ -66,8 +66,8 @@ The summaries on the overview page and the category headings of an area view (*L
 strategy:
   type: custom:overview-plus
   summary_pages:
-    light: /lights-plus/overview       # any navigation path
-    security: /dashboard-alarm/0
+    light: /lights-plus/0              # any navigation path
+    security: /alarm-panel/0
 ```
 
 Keys: `light`, `climate`, `security`, `media_players`, `maintenance`, `energy`. Not set: Home

@@ -12,9 +12,9 @@
 | `favorite_entities`, `hide_welcome_message`, `hide_suggested_entities`, `shortcuts`, `alert_entities` | Own overview page settings (with `load_home_settings: false`), see [Overview page](overview-page.md). |
 | `summary_pages` | Pages the summaries and category headings lead to, see [Pages of the summaries](overview-page.md#pages-of-the-summaries). |
 | `area_indicators` | States shown on the area tiles, see [Area states](area-states.md). |
-| `lazy_render` | Render cards below the first screen of an area view only when they scroll into view (default `true`). |
-| `strip_area_names` | Remove the area name from card names and device headings in area views, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
-| `debug` | Log the generated area views and the section assignment to the browser console. |
+| `lazy_render` | Render cards below the first screen of a view only when they scroll into view (default `true`). |
+| `strip_area_names` | Remove the area name from card names and device headings in area views and the media players view, e.g. "Living room Ceiling light" → "Ceiling light" (default `true`). |
+| `debug` | Log the generated views (and the section assignment of area views) to the browser console. |
 
 ## Area layout
 
