@@ -40,8 +40,6 @@ const ICON = {
   delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
 };
 
-// Spacing follows Home Assistant's own forms: 24px between fields and parts,
-// 12px padding inside collapsible blocks, 8px between the blocks of a list.
 const STYLE = `
   :host { display: block; }
   .top { display: block; }
@@ -58,18 +56,13 @@ const STYLE = `
   .list > .hint { margin: 0; }
   .areas, .rules { margin-bottom: 16px; }
 
-  .home > ha-form + ha-form { display: block; margin-top: 16px; }
-  .home > .subheading { margin-top: 24px; }
-  .home-items, .indicator-items { margin: 8px 0 16px; }
   .panel-body > .hint { margin: 0 0 -8px; }
-  .item-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 12px;
+  .item-row { display: flex; align-items: center; gap: 0; min-height: 48px; padding: 0 4px 0 12px;
     border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-md, 12px); }
-  .item-row { gap: 0; }
   .item-row .label { flex: 1; margin-left: 12px; font-weight: var(--ha-font-weight-medium, 500); }
   .item-row.off .label, .item-row.off ha-icon, .summary-panel.off .summary-icon { opacity: 0.5; }
   .item-row ha-icon, .summary-icon { color: var(--secondary-text-color); }
   .summary-panel .summary-icon { margin-right: 12px; }
-  .home-actions { margin-top: 8px; }
   .rule-actions { margin-bottom: 24px; }
   .general > ha-form { display: block; margin-bottom: 24px; }
   ha-expansion-panel { display: block; --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0 4px 0 12px; }
@@ -798,7 +791,6 @@ class OverviewPlusStrategyEditor extends HTMLElement {
     return { hass: this._hass, t: (/** @type {string} */ k, /** @type {any} */ p) => this._t(k, p) };
   }
 
-
   /** @param {string} key */
   _hint(key) {
     const el = document.createElement("div");
@@ -997,7 +989,7 @@ class OverviewPlusStrategyEditor extends HTMLElement {
       toggle.checked = !!item.enabled;
       toggle.setAttribute("aria-label", this._t(`indicator_${item.preset}`));
       toggle.addEventListener("click", (/** @type {Event} */ ev) => ev.stopPropagation());
-    keepKeys(toggle);
+      keepKeys(toggle);
       const leading = this._indicatorIcon({ ...preset, ...dropUnset(item) });
       const secondary = () => (item.enabled ? this._t(`editor_i_style_${item.style || preset.style}`) : this._t(`indicator_${item.preset}_help`));
       const panel = this._panel(this._t(`indicator_${item.preset}`), secondary(), this._openIndicators.has(item.preset), (open) => {
@@ -1502,19 +1494,19 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           if (sectionShape(section) !== before) form.schema = sectionSchema(this._ctx(), this._opts, section);
           refresh();
           this._emit();
-      });
+        });
 
-      const row = document.createElement("div");
-      row.className = "row";
-      row.append(this._deleteButton("editor_delete_section", () => {
-        entry.sections.splice(index, 1);
-        const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-        this._openSections.set(entry.area, next);
-        rerender();
-        refreshAreaHeader();
-        this._emit();
-      }));
-      body.append(form, this._groupRowsBlock(section, "hide"), this._groupRowsBlock(section, "sort"), row);
+        const row = document.createElement("div");
+        row.className = "row";
+        row.append(this._deleteButton("editor_delete_section", () => {
+          entry.sections.splice(index, 1);
+          const next = new Set([...open].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          this._openSections.set(entry.area, next);
+          rerender();
+          refreshAreaHeader();
+          this._emit();
+        }));
+        body.append(form, this._groupRowsBlock(section, "hide"), this._groupRowsBlock(section, "sort"), row);
       });
     });
   }
@@ -1719,16 +1711,16 @@ class OverviewPlusStrategyEditor extends HTMLElement {
           const h = this._ruleHeader(rule, index);
           panel.setHeader(h.header, h.secondary);
           this._emit();
-      });
-      const row = document.createElement("div");
-      row.className = "row";
-      row.append(this._deleteButton("editor_delete_rule", () => {
-        rules.splice(index, 1);
-        this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
-        this._renderRules();
-        this._emit();
-      }));
-      body.append(form, row);
+        });
+        const row = document.createElement("div");
+        row.className = "row";
+        row.append(this._deleteButton("editor_delete_rule", () => {
+          rules.splice(index, 1);
+          this._openRules = new Set([...this._openRules].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+          this._renderRules();
+          this._emit();
+        }));
+        body.append(form, row);
       });
     });
   }

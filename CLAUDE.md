@@ -18,11 +18,12 @@ These rules apply to every Claude session working on this repository.
 
 ## Project in one paragraph
 
-`overview-plus` is a custom Lovelace **dashboard strategy** (`type: custom:overview-plus`) for Home Assistant.
-It rebuilds the structure of the built-in Overview dashboard (`home` strategy, HA 2026.2+) from the public
-registry data in `hass` and adds user configuration on top: generic card replacement rules (`card_rules`)
-and per-area view overrides (`area_overrides`). It does **not** wrap or patch the built-in strategies, so every
-card is correct on the first render (no flicker from lazy-loaded built-in modules).
+`overview-plus` is a custom Lovelace **dashboard strategy** (`type: custom:overview-plus`) for Home Assistant
+2026.10+. It rebuilds the built-in Overview dashboard (`home` strategy) – overview page, area views, media
+players and devices views – from the registry data in `hass`; it does **not** wrap or patch the built-in
+strategies, so every card is correct on the first render. On top it adds own overview page settings and summary pages, area states on the area tiles,
+per-area layouts (`area_overrides`) and card rules with tap popups (`card_rules`), all set up in its visual
+editor (`src/editor/`).
 
 ## Code conventions
 
@@ -36,6 +37,13 @@ card is correct on the first render (no flicker from lazy-loaded built-in module
 - All user-facing strings go through `src/i18n.js`.
 - Strategy code must never throw into the frontend: catch errors, log with the `[overview-plus]` prefix,
   and fall back to a sensible view.
+
+## Documentation
+
+- `README.md` is short: what it does, installation, getting started, links to `docs/`.
+- Feature pages in `docs/` describe what a feature does and link to `docs/editor.md`; how it is set up –
+  editor fields and YAML – belongs on `docs/editor.md`.
+- Screenshots in light and dark, side by side; README image URLs are absolute (HACS renders the README).
 
 ## Commands
 

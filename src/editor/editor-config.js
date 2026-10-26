@@ -9,13 +9,16 @@
  * Form shape:
  *   load_home_settings: boolean        true = overview page settings of the built-in Overview
  *   home: { welcome, suggested, favorites, alerts, alert_extra, items }   own overview page settings
+ *   indicators: area states, see indicatorsToForm
  *   summary_pages: { light, climate, … }   pages the summaries lead to; empty = Home Assistant's own
- *   debug: boolean
+ *   strip_area_names, lazy_render, debug: boolean
  *   rules: [{ r_action, r_type, r_name, r_icon, r_color, r_options, r_tap, r_popup_type, r_popup_options,
  *            r_scope, r_contexts, r_stop, m_* }]
  *   areas: [{
  *     area, badges: "default" | "none" | "custom", badge_entities, show_default_sections, show_other_devices, show_automations,
- *     sections: [{ title, icon, layout, m_*, e_*, p_* }]
+ *     t_sensors, t_sensor_classes, t_entities, t_show_names, t_alert_classes, t_alert_entities, t_color, t_name,
+ *     tile_extra (other tile options),
+ *     sections: [{ title, icon, layout, hidden, m_*, e_*, p_*, hide_rules, sort_groups } | { default, hidden }]
  *   }]
  *
  * Selection fields (m_*), all lists: m_label, m_integration, m_domain, m_device_class,
@@ -30,13 +33,11 @@ import { INDICATOR_PRESETS } from "../area-indicators.js";
 /** Keys of the strategy config managed by the form. */
 const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", "area_indicators", ...HOME_KEYS];
 
-/** Selection criteria editable as fields (all accept one or more values). */
+/** Selection criteria editable as fields (all accept one or more values); each can also be excluded (`not`). */
 export const MATCH_FIELDS = [
   "label", "integration", "domain", "device_class", "entity_category",
   "manufacturer", "model", "device", "device_name", "entity", "area", "floor",
 ];
-/** Every criterion can also be excluded. */
-export const NOT_FIELDS = MATCH_FIELDS;
 const ENTITY_FILTER_FIELDS = ["include_domains", "exclude_domains", "include_categories", "exclude_device_classes", "exclude"];
 const CARD_FIELDS = ["name", "icon", "color"];
 
@@ -75,7 +76,7 @@ export function matchRepresentable(match) {
   if (!isPlainObject(match)) return false;
   return Object.entries(match).every(([key, value]) => {
     if (key === "not") {
-      return isPlainObject(value) && Object.entries(value).every(([k, v]) => NOT_FIELDS.includes(k) && isStringOrList(v));
+      return isPlainObject(value) && Object.entries(value).every(([k, v]) => MATCH_FIELDS.includes(k) && isStringOrList(v));
     }
     return MATCH_FIELDS.includes(key) && isStringOrList(value);
   });
@@ -93,7 +94,7 @@ export function matchToFields(match) {
     if (match?.[key] === undefined) continue;
     fields[`m_${key}`] = toList(match[key]);
   }
-  for (const key of NOT_FIELDS) {
+  for (const key of MATCH_FIELDS) {
     if (match?.not?.[key] !== undefined) fields[`m_not_${key}`] = toList(match.not[key]);
   }
   return fields;
@@ -113,7 +114,7 @@ export function fieldsToMatch(fields) {
   }
   /** @type {Record<string, any>} */
   const not = {};
-  for (const key of NOT_FIELDS) {
+  for (const key of MATCH_FIELDS) {
     const value = fromList(fields[`m_not_${key}`]);
     if (value !== undefined) not[key] = value;
   }

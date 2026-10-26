@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateOverviewView, overviewShouldRegenerate, resolveShortcutItems } from "../src/views/overview-view.js";
+import { generateOverviewView, overviewShouldRegenerate } from "../src/views/overview-view.js";
+import { resolveShortcutItems } from "../src/home-settings.js";
 import { makeHass } from "./fixtures.js";
 
 function hass(extra = {}) {

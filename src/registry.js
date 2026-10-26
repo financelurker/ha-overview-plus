@@ -59,19 +59,7 @@ export const entityCategory = (ctx) => ctx.entity?.entity_category || "none";
 export const deviceClass = (ctx) => ctx.state?.attributes?.device_class || "none";
 
 /**
- * Labels of an entity, optionally including the labels of its device.
- * @param {EntityContext} ctx
- * @param {boolean} [withDevice]
- * @returns {string[]}
- */
-export const labelsOf = (ctx, withDevice = true) => {
-  const labels = [...(ctx.entity?.labels || [])];
-  if (withDevice && ctx.device?.labels) labels.push(...ctx.device.labels);
-  return labels;
-};
-
-/**
- * All entity ids (with a state) whose effective area is `areaId`, excluding hidden entities.
+ * Contexts of the entities (with a state) whose effective area is `areaId`, excluding hidden entities.
  * @param {any} hass
  * @param {string} areaId
  * @returns {EntityContext[]}

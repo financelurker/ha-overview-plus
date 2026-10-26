@@ -17,8 +17,6 @@ import { findEntities, isOtherDeviceEntity, simpleFilter, SUMMARY_FILTERS } from
 import { resolveShortcutItems } from "../home-settings.js";
 import { hasOwnSummaryPage, summaryPage } from "../summary-pages.js";
 import { t } from "../i18n.js";
-
-export { resolveShortcutItems };
 import { domainOf, entityContext, entityCategory } from "../registry.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
@@ -45,7 +43,6 @@ const MAINTENANCE_FILTERS = [
   { domain: "binary_sensor", device_class: ["battery"] },
 ];
 
-
 const DANGER_BINARY_SENSOR_CLASSES = new Set(["carbon_monoxide", "gas", "glass_break", "moisture", "safety", "smoke"]);
 
 /** @param {any} hass @param {string} component */
@@ -54,7 +51,7 @@ const isLoaded = (hass, component) => !!hass.config?.components?.includes(compon
 /** @param {string} path */
 const navigate = (path) => ({ action: "navigate", navigation_path: path });
 
-// ------------------------------------------------------------ helpers (ported)
+// ------------------------------------------------------------ helpers
 
 /**
  * Floors with their areas (registry order), plus areas without floor.
@@ -305,7 +302,7 @@ export async function generateOverviewView(hass, options = {}) {
       const prefs = await hass.callWS({ type: "energy/get_prefs" });
       hasEnergy = !!prefs?.energy_sources?.some((/** @type {any} */ s) => s.type === "grid" && !!s.stat_energy_from);
     } catch {
-      hasEnergy = false;
+      // Energy preferences not available: no energy summary
     }
   }
 

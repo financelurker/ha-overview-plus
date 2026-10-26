@@ -139,8 +139,6 @@ async function openPopup(popup, entityId) {
   return true;
 }
 
-const insidePopup = insideDialog;
-
 /**
  * Popup of the card that last fired `hass-action`. Many cards hand their actions to
  * Home Assistant this way, and Home Assistant then fires `hass-more-info` from its
@@ -151,7 +149,7 @@ let pending;
 
 /** @param {Event} ev */
 function onAction(ev) {
-  if (insidePopup(ev)) return;
+  if (insideDialog(ev)) return;
   const popup = popupOf(/** @type {any} */ (ev).detail?.config) ?? popupForEvent(ev);
   pending = popup ? { popup, until: Date.now() + 1000 } : undefined;
 }
@@ -161,7 +159,7 @@ function onMoreInfo(ev) {
   if (passThrough) return;
   const detail = /** @type {any} */ (ev).detail;
   // Events from inside an open popup go to the regular more-info dialog
-  if (insidePopup(ev)) return;
+  if (insideDialog(ev)) return;
   const recent = pending && pending.until >= Date.now() ? pending.popup : undefined;
   pending = undefined;
   const popup = popupForEvent(ev) ?? recent;
