@@ -18,6 +18,7 @@ import { resolveShortcutItems } from "../home-settings.js";
 import { hasOwnSummaryPage, summaryPage } from "../summary-pages.js";
 import { t } from "../i18n.js";
 import { domainOf, entityContext, entityCategory } from "../registry.js";
+import { navigateAction, registryChanged } from "../util.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
 
@@ -47,9 +48,6 @@ const DANGER_BINARY_SENSOR_CLASSES = new Set(["carbon_monoxide", "gas", "glass_b
 
 /** @param {any} hass @param {string} component */
 const isLoaded = (hass, component) => !!hass.config?.components?.includes(component);
-
-/** @param {string} path */
-const navigate = (path) => ({ action: "navigate", navigation_path: path });
 
 // ------------------------------------------------------------ helpers
 
@@ -143,7 +141,7 @@ function areaCard(hass, areaId, tile, indicators) {
     area: areaId,
     display_type: "compact",
     sensor_classes: area?.temperature_entity_id ? ["temperature"] : [],
-    tap_action: navigate(`areas-${areaId}`),
+    tap_action: navigateAction(`areas-${areaId}`),
     vertical: true,
     grid_options: { rows: 2, columns: 4 },
   };
@@ -210,7 +208,7 @@ export async function generateOverviewView(hass, options = {}) {
         name: t(hass, "devices"),
         icon: "mdi:devices",
         hide_state: true,
-        tap_action: navigate("other-devices"),
+        tap_action: navigateAction("other-devices"),
         grid_options: { rows: 2, columns: 4 },
       });
     }
@@ -277,7 +275,7 @@ export async function generateOverviewView(hass, options = {}) {
   const pages = options.summary_pages;
   // A summary needs Home Assistant's page only if it leads there
   const reachable = (/** @type {string} */ key) => !!panels[key] || hasOwnSummaryPage(pages, key);
-  const page = (/** @type {string} */ key) => navigate(/** @type {string} */ (summaryPage(hass, pages, key)));
+  const page = (/** @type {string} */ key) => navigateAction(/** @type {string} */ (summaryPage(hass, pages, key)));
   const hasLights = reachable("light") && any(SUMMARY_FILTERS.light);
   const hasMediaPlayers = any(SUMMARY_FILTERS.media_players);
   const hasClimate =
@@ -329,8 +327,8 @@ export async function generateOverviewView(hass, options = {}) {
 
   /** @type {Record<string, any>[]} */
   const summaryCards = [
-    { type: "repairs", hide_empty: true, tap_action: navigate("/config/repairs?historyBack=1") },
-    { type: "updates", hide_empty: true, tap_action: navigate("/config/updates?historyBack=1") },
+    { type: "repairs", hide_empty: true, tap_action: navigateAction("/config/repairs?historyBack=1") },
+    { type: "updates", hide_empty: true, tap_action: navigateAction("/config/updates?historyBack=1") },
     { type: "discovered-devices", hide_empty: true },
   ];
   for (const item of resolveShortcutItems(options.shortcuts)) {
@@ -339,7 +337,7 @@ export async function generateOverviewView(hass, options = {}) {
       const card = summaryBuilders[item.key]?.();
       if (card) summaryCards.push(card);
     } else {
-      summaryCards.push({ type: "shortcut", label: item.label, icon: item.icon, color: item.color, tap_action: navigate(item.path) });
+      summaryCards.push({ type: "shortcut", label: item.label, icon: item.icon, color: item.color, tap_action: navigateAction(item.path) });
     }
   }
   const hasVisibleSummaryCards = summaryCards.some((card) => !card.hide_empty);
@@ -428,7 +426,7 @@ export async function generateOverviewView(hass, options = {}) {
  * @param {any} newHass
  */
 export function overviewShouldRegenerate(options, oldHass, newHass) {
-  if (["entities", "devices", "areas", "floors", "panels", "labels"].some((k) => oldHass[k] !== newHass[k])) return true;
+  if (registryChanged(oldHass, newHass)) return true;
   return (options.alert_entities || []).some(
     (a) => alertSeverity(a, oldHass.states?.[a.entity]) !== alertSeverity(a, newHass.states?.[a.entity])
   );

@@ -15,6 +15,7 @@ import { createCardFactory } from "../card-factory.js";
 import { findEntities, isOtherDeviceEntity, SUMMARY_FILTERS } from "../entity-filter.js";
 import { t } from "../i18n.js";
 import { deviceName, displayName, entityCategory, entityContext, stripAreaName } from "../registry.js";
+import { navigateAction } from "../util.js";
 import { floorHierarchy, floorIcon } from "./overview-view.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
@@ -61,7 +62,7 @@ export function generateMediaPlayersView(hass, options = {}) {
         heading_style: "subtitle",
         type: "heading",
         heading: area.name,
-        tap_action: { action: "navigate", navigation_path: `areas-${area.area_id}` },
+        tap_action: navigateAction(`areas-${area.area_id}`),
       });
       cards.push(.../** @type {Record<string, any>[]} */ (inArea));
     }
@@ -136,7 +137,7 @@ export function generateOtherDevicesView(hass, options = {}) {
         {
           type: "heading",
           heading: deviceName(device) || t(hass, "unnamed_device"),
-          tap_action: hass.user?.is_admin ? { action: "navigate", navigation_path: `/config/devices/device/${deviceId}` } : { action: "none" },
+          tap_action: hass.user?.is_admin ? navigateAction(`/config/devices/device/${deviceId}`) : { action: "none" },
           badges: [],
         },
         custom ?? { type: "entities", entities: rows.map((ctx) => ({ entity: ctx.entity_id, name: { type: "entity" } })) },

@@ -30,6 +30,7 @@
  */
 
 import { matches } from "./matcher.js";
+import { isObject } from "./util.js";
 
 /** Key on the generated card config that carries the popup (see popup.js). */
 export const POPUP_KEY = "overview_plus";
@@ -65,13 +66,13 @@ export function substitute(value, vars) {
   return value;
 }
 
-/** @param {any} value @returns {boolean} */
-const usesPlaceholder = (value) =>
+/** Whether a card config uses the `$entity` placeholder. @param {any} value @returns {boolean} */
+export const usesPlaceholder = (value) =>
   typeof value === "string"
     ? /\$entity\b/.test(value)
     : Array.isArray(value)
       ? value.some(usesPlaceholder)
-      : !!value && typeof value === "object" && Object.values(value).some(usesPlaceholder);
+      : isObject(value) && Object.values(value).some(usesPlaceholder);
 
 /**
  * @param {any} rule
@@ -79,7 +80,6 @@ const usesPlaceholder = (value) =>
  * @returns {rule is CardRule}
  */
 function validRule(rule, index) {
-  const isObject = (/** @type {any} */ v) => !!v && typeof v === "object" && !Array.isArray(v);
   if (!isObject(rule)) {
     console.warn(`[overview-plus] card_rules[${index}] ignored: not an object.`, rule);
     return false;
