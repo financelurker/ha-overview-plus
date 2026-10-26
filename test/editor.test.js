@@ -7,8 +7,7 @@ import assert from "node:assert/strict";
 import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = installDom();
-win.customElements.define("ha-form", class extends win.HTMLElement {});
+const win = installDom({ stubs: ["ha-form"] });
 
 const { EDITOR_TAG } = await import("../src/editor/editor.js");
 
@@ -693,10 +692,11 @@ test("entity lists tolerate values that are not a list or contain nothing usable
   assert.deepEqual(listValues(listOf("sensor.pve_cpu")), ["sensor.pve_cpu"]);
   // no entities: the tile shows the default values, there is no list
   assert.equal(listOf(null), null);
-  // unusable entries do not break the list; it can still be added to
+  // unusable entries do not break the list (they stay as empty rows); it can still be added to
   const mixed = listOf([null, 3, "sensor.pve_cpu"]);
   assert.ok(mixed.querySelector("ha-form.entity-add"));
-  assert.ok(listValues(mixed).includes("sensor.pve_cpu"));
+  assert.equal(listValues(mixed).length, 3);
+  assert.equal(listValues(mixed)[2], "sensor.pve_cpu");
 });
 
 test("Enter and Space on a header arrow move the entry instead of toggling the panel", () => {

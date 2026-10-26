@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = installDom();
-win.customElements.define("ha-form", class extends win.HTMLElement {});
+const win = installDom({ stubs: ["ha-form"] });
 win.customElements.define("ha-expansion-panel", class extends win.HTMLElement {
   toggle(open) {
     this.expanded = open;
