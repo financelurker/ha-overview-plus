@@ -29,6 +29,7 @@
 import { DEFAULT_SECTIONS } from "../views/area-view.js";
 import { DEFAULT_SUMMARY_KEYS, HOME_KEYS, resolveShortcutItems } from "../home-settings.js";
 import { INDICATOR_PRESETS } from "../area-indicators.js";
+import { isObject, stateText } from "../util.js";
 
 /** Keys of the strategy config managed by the form. */
 const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", "area_indicators", ...HOME_KEYS];
@@ -42,13 +43,10 @@ const ENTITY_FILTER_FIELDS = ["include_domains", "exclude_domains", "include_cat
 const CARD_FIELDS = ["name", "icon", "color"];
 
 /** @param {any} v */
-const isPlainObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-
-/** @param {any} v */
 const isEmpty = (v) =>
   v === undefined || v === null || v === "" ||
   (Array.isArray(v) && v.length === 0) ||
-  (isPlainObject(v) && Object.keys(v).length === 0);
+  (isObject(v) && Object.keys(v).length === 0);
 
 /** @param {Record<string, any>} obj */
 const dropEmpty = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => !isEmpty(v)));
@@ -73,10 +71,10 @@ const withoutPrefix = (obj, prefix) => Object.fromEntries(Object.entries(obj).fi
 /** @param {any} match */
 export function matchRepresentable(match) {
   if (match === undefined || match === null) return true;
-  if (!isPlainObject(match)) return false;
+  if (!isObject(match)) return false;
   return Object.entries(match).every(([key, value]) => {
     if (key === "not") {
-      return isPlainObject(value) && Object.entries(value).every(([k, v]) => MATCH_FIELDS.includes(k) && isStringOrList(v));
+      return isObject(value) && Object.entries(value).every(([k, v]) => MATCH_FIELDS.includes(k) && isStringOrList(v));
     }
     return MATCH_FIELDS.includes(key) && isStringOrList(value);
   });
@@ -127,7 +125,7 @@ export function fieldsToMatch(fields) {
 /** @param {any} entities */
 function entitiesToFields(entities) {
   if (entities === undefined || entities === null) return {};
-  const ok = isPlainObject(entities) && Object.entries(entities).every(([k, v]) => ENTITY_FILTER_FIELDS.includes(k) && isStringOrList(v));
+  const ok = isObject(entities) && Object.entries(entities).every(([k, v]) => ENTITY_FILTER_FIELDS.includes(k) && isStringOrList(v));
   if (!ok) return { e_yaml: entities };
   return Object.fromEntries(Object.entries(entities).map(([k, v]) => [`e_${k}`, toList(v)]));
 }
@@ -147,7 +145,7 @@ function fieldsToEntities(fields) {
 /** @param {any} primary */
 function primaryToFields(primary) {
   if (primary === undefined || primary === null) return {};
-  const ok = isPlainObject(primary) && Object.entries(primary).every(([k, v]) => ["domain", "device_class"].includes(k) && isStringOrList(v));
+  const ok = isObject(primary) && Object.entries(primary).every(([k, v]) => ["domain", "device_class"].includes(k) && isStringOrList(v));
   if (!ok) return { p_yaml: primary };
   return dropEmpty({ p_domain: toList(primary.domain), p_device_class: toList(primary.device_class) });
 }
@@ -169,16 +167,14 @@ function fieldsToPrimary(fields) {
  */
 function hideRulesToForm(hide) {
   const list = /** @type {any[]} */ (toList(hide));
-  /** @param {any} v */
-  const text = (v) => (v === true ? "on" : v === false ? "off" : String(v));
   // Plain states (also mixed with rules) are one rule for every entity, as in the area view
-  const plain = list.filter((r) => !isPlainObject(r) && r !== null && r !== undefined).map(text).filter(Boolean);
+  const plain = list.filter((r) => !isObject(r) && r !== null && r !== undefined).map(stateText).filter(Boolean);
   return [
     ...(plain.length ? [{ domain: [], device_class: [], states: plain }] : []),
-    ...list.filter(isPlainObject).map((r) => ({
+    ...list.filter(isObject).map((r) => ({
       domain: toList(r.domain).map(String),
       device_class: toList(r.device_class).map(String),
-      states: toList(r.states ?? r.state).map(text).filter(Boolean),
+      states: toList(r.states ?? r.state).map(stateText).filter(Boolean),
     })),
   ];
 }
@@ -190,7 +186,7 @@ function hideRulesToForm(hide) {
  * @returns {{ domain: string[], device_class: string[] }[]}
  */
 function sortToForm(sort) {
-  return /** @type {any[]} */ (toList(sort)).map((g) => (typeof g === "string" ? { domain: g } : g)).filter(isPlainObject).map((g) => ({
+  return /** @type {any[]} */ (toList(sort)).map((g) => (typeof g === "string" ? { domain: g } : g)).filter(isObject).map((g) => ({
     domain: toList(g.domain).map(String),
     device_class: toList(g.device_class).map(String),
   }));
@@ -217,10 +213,10 @@ function hideRulesFromForm(rules) {
 
 /** @param {any} section */
 function sectionToForm(section) {
-  const { match, entities, primary, sort, ...rest } = isPlainObject(section) ? section : {};
+  const { match, entities, primary, sort, ...rest } = isObject(section) ? section : {};
   // "Hide while in state" and "Order" have their own rows in the editor, the rest of the entity filter its fields
-  const { hide_states, ...filter } = isPlainObject(entities) ? entities : { hide_states: undefined };
-  const others = isPlainObject(entities) ? (Object.keys(filter).length ? filter : undefined) : entities;
+  const { hide_states, ...filter } = isObject(entities) ? entities : { hide_states: undefined };
+  const others = isObject(entities) ? (Object.keys(filter).length ? filter : undefined) : entities;
   return {
     ...rest, ...matchToFields(match), ...entitiesToFields(others), ...primaryToFields(primary),
     ...(hide_states !== undefined ? { hide_rules: hideRulesToForm(hide_states) } : {}),
@@ -239,12 +235,12 @@ function sectionsToForm(sections, withDefaults) {
   // Standard categories: only with the option, only known ones, each once (the first entry counts)
   const seen = new Set();
   const list = (Array.isArray(sections) ? sections : []).filter((s) => {
-    if (!isPlainObject(s) || !s.default) return true;
+    if (!isObject(s) || !s.default) return true;
     if (!withDefaults || !DEFAULT_SECTIONS.includes(s.default) || seen.has(s.default)) return false;
     seen.add(s.default);
     return true;
   });
-  const placed = new Set(list.filter((s) => isPlainObject(s) && s.default).map((s) => s.default));
+  const placed = new Set(list.filter((s) => isObject(s) && s.default).map((s) => s.default));
   const missing = withDefaults ? DEFAULT_SECTIONS.filter((key) => !placed.has(key)).map((key) => ({ default: key })) : [];
   return [...missing, ...list].map(sectionToForm);
 }
@@ -277,7 +273,7 @@ function withoutDefaultOrder(list) {
  */
 function withHideRules(entities, rules) {
   if (!rules) return entities;
-  return isPlainObject(entities) || entities === undefined ? { ...(entities || {}), hide_states: rules } : entities;
+  return isObject(entities) || entities === undefined ? { ...(entities || {}), hide_states: rules } : entities;
 }
 
 /** @param {Record<string, any>} form */
@@ -300,10 +296,10 @@ function formToSection(form) {
 
 /** @param {any} rule */
 function ruleToForm(rule) {
-  const { match, card, scope, contexts, stop, tap, ...rest } = isPlainObject(rule) ? rule : {};
+  const { match, card, scope, contexts, stop, tap, ...rest } = isObject(rule) ? rule : {};
   /** @type {Record<string, any>} */
   const form = { ...rest, ...matchToFields(match) };
-  const popup = isPlainObject(tap) && Object.keys(tap).length === 1 && isPlainObject(tap.popup) && typeof tap.popup.type === "string"
+  const popup = isObject(tap) && Object.keys(tap).length === 1 && isObject(tap.popup) && typeof tap.popup.type === "string"
     ? tap.popup
     : undefined;
   if (popup) {
@@ -320,7 +316,7 @@ function ruleToForm(rule) {
   } else if (card === false) {
     form.r_action = "hide";
   } else {
-    const { type, ...cardRest } = isPlainObject(card) ? card : {};
+    const { type, ...cardRest } = isObject(card) ? card : {};
     form.r_action = type ? "replace" : "adjust";
     if (type) form.r_type = type;
     for (const key of CARD_FIELDS) if (cardRest[key] !== undefined) form[`r_${key}`] = cardRest[key];
@@ -349,11 +345,11 @@ function formToRule(form) {
   } else {
     const card = dropEmpty({
       ...(action === "replace" && form.r_type ? { type: form.r_type } : {}),
-      ...(isPlainObject(form.r_options) ? form.r_options : {}),
+      ...(isObject(form.r_options) ? form.r_options : {}),
       ...Object.fromEntries(CARD_FIELDS.map((k) => [k, form[`r_${k}`]])),
     });
     if (form.r_tap === "popup" && form.r_popup_type) {
-      rule.tap = { popup: { type: form.r_popup_type, ...(isPlainObject(form.r_popup_options) ? form.r_popup_options : {}) } };
+      rule.tap = { popup: { type: form.r_popup_type, ...(isObject(form.r_popup_options) ? form.r_popup_options : {}) } };
     }
     // A rule that only sets the popup leaves the card as it is
     if (Object.keys(card).length || rule.tap === undefined) rule.card = card;
@@ -375,7 +371,7 @@ export function homeToForm(settings) {
   const alerts = [];
   for (const item of Array.isArray(settings.alert_entities) ? settings.alert_entities : []) {
     if (typeof item === "string") alerts.push(item);
-    else if (isPlainObject(item) && typeof item.entity === "string") {
+    else if (isObject(item) && typeof item.entity === "string") {
       const { entity, ...extra } = item;
       alerts.push(entity);
       if (Object.keys(extra).length) alertExtra[entity] = extra;
@@ -433,7 +429,7 @@ export function indicatorsToForm(indicators) {
   const items = [];
   const seen = new Set();
   for (const entry of Array.isArray(indicators) ? indicators : []) {
-    if (isPlainObject(entry) && entry.preset && INDICATOR_PRESETS[entry.preset] && !seen.has(entry.preset)) {
+    if (isObject(entry) && entry.preset && INDICATOR_PRESETS[entry.preset] && !seen.has(entry.preset)) {
       seen.add(entry.preset);
       const { preset, style, icon, color, ...rest } = entry;
       items.push({ preset, enabled: true, style, icon, color, ...(Object.keys(rest).length ? { extra: rest } : {}) });
@@ -457,7 +453,7 @@ export function indicatorsFromForm(items) {
     if (!item.enabled) return [];
     const preset = INDICATOR_PRESETS[item.preset];
     /** @type {Record<string, any>} */
-    const entry = { preset: item.preset, ...(isPlainObject(item.extra) ? item.extra : {}) };
+    const entry = { preset: item.preset, ...(isObject(item.extra) ? item.extra : {}) };
     for (const key of INDICATOR_FIELDS) {
       const value = item[key];
       if (value !== undefined && value !== "" && value !== /** @type {any} */ (preset)?.[key]) entry[key] = value;
@@ -474,20 +470,20 @@ export function indicatorsFromForm(items) {
  * @returns {Record<string, any>} form data
  */
 export function toForm(config) {
-  const overrides = isPlainObject(config.area_overrides) ? config.area_overrides : {};
+  const overrides = isObject(config.area_overrides) ? config.area_overrides : {};
   return {
     load_home_settings: config.load_home_settings !== false,
     home: homeToForm(config),
     indicators: indicatorsToForm(config.area_indicators),
-    summary_pages: isPlainObject(config.summary_pages) ? { ...config.summary_pages } : {},
+    summary_pages: isObject(config.summary_pages) ? { ...config.summary_pages } : {},
     strip_area_names: config.strip_area_names !== false,
     lazy_render: config.lazy_render !== false,
     debug: config.debug === true,
     rules: (Array.isArray(config.card_rules) ? config.card_rules : []).map(ruleToForm),
     areas: Object.entries(overrides).map(([area, o]) => {
-      const { sections, badges, show_default_sections, show_other_devices, show_automations, tile, ...rest } = isPlainObject(o) ? o : {};
+      const { sections, badges, show_default_sections, show_other_devices, show_automations, tile, ...rest } = isObject(o) ? o : {};
       const { sensor_classes, alert_classes, color, name, entities, show_names, alert_entities, ...tileExtra } =
-        isPlainObject(tile) ? tile : {};
+        isObject(tile) ? tile : {};
       const entityList = toList(entities);
       return {
         ...rest,
@@ -523,7 +519,7 @@ export function fromForm(form, original) {
 
   if (form.load_home_settings === false) config.load_home_settings = false;
   const pages = Object.fromEntries(
-    Object.entries(isPlainObject(form.summary_pages) ? form.summary_pages : {}).filter(([, v]) => typeof v === "string" ? v.trim() : v != null)
+    Object.entries(isObject(form.summary_pages) ? form.summary_pages : {}).filter(([, v]) => typeof v === "string" ? v.trim() : v != null)
   );
   if (Object.keys(pages).length) config.summary_pages = pages;
   const indicators = indicatorsFromForm(form.indicators);
@@ -547,7 +543,7 @@ export function fromForm(form, original) {
     /** @type {Record<string, any>} */
     const o = { ...rest };
     /** @type {Record<string, any>} */
-    const tile = { ...(isPlainObject(tile_extra) ? tile_extra : {}) };
+    const tile = { ...(isObject(tile_extra) ? tile_extra : {}) };
     if (t_sensors === "custom") tile.sensor_classes = [...(t_sensor_classes || [])];
     if (t_sensors === "entities" && t_entities?.length) {
       tile.entities = [...t_entities];

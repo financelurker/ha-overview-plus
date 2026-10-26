@@ -1,5 +1,5 @@
 // @ts-check
-/** Small helpers shared by the view generators. */
+/** Small helpers shared across modules. */
 
 /** @param {any} v @returns {boolean} a plain object (not an array) */
 export const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
