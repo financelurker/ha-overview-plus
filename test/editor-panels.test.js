@@ -1,11 +1,10 @@
 // The editor with a stand-in for HA's ha-expansion-panel, whose expanded-changed event bubbles.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) globalThis[key] = win[key];
+const win = installDom();
 win.customElements.define("ha-form", class extends win.HTMLElement {});
 win.customElements.define("ha-expansion-panel", class extends win.HTMLElement {
   toggle(open) {

@@ -1,16 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) {
-  globalThis[key] = win[key];
-}
-// Stand-ins for HA's tile components: plain elements that keep their properties
-for (const tag of ["ha-card", "ha-tile-container", "ha-tile-icon", "ha-tile-info", "ha-tile-badge", "ha-state-icon"]) {
-  win.customElements.define(tag, class extends win.HTMLElement {});
-}
+const win = installDom({ stubs: ["ha-card", "ha-tile-container", "ha-tile-icon", "ha-tile-info", "ha-tile-badge", "ha-state-icon"] });
 
 const { AREA_TILE_TYPE } = await import("../src/area-tile-card.js");
 const { generateOverviewView } = await import("../src/views/overview-view.js");

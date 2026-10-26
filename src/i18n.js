@@ -4,8 +4,11 @@
  * its key is used via hass.localize; the local dictionary is the fallback.
  */
 
-/** @type {Record<string, Record<string, string>>} */
-const STRINGS = {
+/**
+ * Texts per language; `en` is the fallback. Exported for the tests.
+ * @type {Record<string, Record<string, string>>}
+ */
+export const STRINGS = {
   en: {
     dashboard_title: "Overview Plus",
     light: "Lights",

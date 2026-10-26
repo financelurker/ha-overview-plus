@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
+import { st } from "./fixtures.js";
 import { activeIndicators, prepareIndicators, resolveIndicator, watchedIndicators } from "../src/area-indicators.js";
 import { indicatorsFromForm, indicatorsToForm } from "../src/editor/editor-config.js";
 
-const st = (entity_id, state, attributes = {}) => ({ entity_id, state, attributes });
 function hass() {
   const states = Object.fromEntries([
     st("binary_sensor.room_occupied", "on", { device_class: "occupancy" }),
@@ -117,11 +117,7 @@ test("editor form keeps what it cannot edit: unknown presets, duplicates, other 
 
 // ------------------------------------------------------------------ tile
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) globalThis[key] = win[key];
-for (const tag of ["ha-card", "ha-tile-container", "ha-tile-icon", "ha-tile-info", "ha-tile-badge", "ha-state-icon", "ha-icon"]) {
-  win.customElements.define(tag, class extends win.HTMLElement {});
-}
+const win = installDom({ stubs: ["ha-card", "ha-tile-container", "ha-tile-icon", "ha-tile-info", "ha-tile-badge", "ha-state-icon", "ha-icon"] });
 await import("../src/area-tile-card.js");
 
 function tile(indicators, h = hass()) {

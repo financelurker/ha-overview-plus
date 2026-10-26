@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) {
-  globalThis[key] = win[key];
-}
+const win = installDom();
 
 // Stand-in for HA's tile card: sizes itself from its config, counts renders
 let renders = 0;
