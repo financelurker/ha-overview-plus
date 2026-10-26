@@ -1,13 +1,10 @@
 // The list of devices opened by the heading of an area section with several devices.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = new Window({ url: "http://ha.local/lovelace/0" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event", "history", "location"]) {
-  globalThis[key] = win[key];
-}
+const win = installDom({ url: "http://ha.local/lovelace/0", keys: ["history", "location"] });
 const { DEVICE_LIST_KEY } = await import("../src/device-list.js");
 
 const ha = document.createElement("home-assistant");

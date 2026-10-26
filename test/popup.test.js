@@ -1,15 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 import { createCardFactory, POPUP_KEY } from "../src/card-factory.js";
 import { entityContext } from "../src/registry.js";
 import { generateAreaView } from "../src/views/area-view.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event", "requestAnimationFrame", "cancelAnimationFrame"]) {
-  globalThis[key] = win[key];
-}
+const win = installDom({ keys: ["requestAnimationFrame", "cancelAnimationFrame"] });
 const { popupCardConfig, popupForEvent } = await import("../src/popup.js");
 
 const hass = makeHass();

@@ -22,6 +22,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/export const VERSION = \".*\";/export const VERSION = \"${VERSION}\";/" src/overview-plus.js
       - run: npm run check
+      - run: npm test
       - run: npm run build
       - name: Attach bundle to release
         env:

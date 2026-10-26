@@ -1,12 +1,9 @@
 // The area tile before Home Assistant's tile components are loaded.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) globalThis[key] = win[key];
-win.customElements.define("ha-card", class extends win.HTMLElement {});
-win.customElements.define("ha-icon", class extends win.HTMLElement {});
+const win = installDom({ stubs: ["ha-card", "ha-icon"] });
 await import("../src/area-tile-card.js");
 
 test("fallback shows the area states and switches to the tile once the components are loaded", async () => {

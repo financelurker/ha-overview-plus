@@ -1,7 +1,7 @@
 // Fake `hass` object with a small home: a living room and a virtual "proxmox" area.
 
 /** @param {string} id @param {string} state @param {Record<string, any>} [attributes] */
-const st = (id, state, attributes = {}) => ({ entity_id: id, state, attributes });
+export const st = (id, state, attributes = {}) => ({ entity_id: id, state, attributes });
 
 /** @param {string} id @param {Record<string, any>} [extra] */
 const ent = (id, extra = {}) => ({ entity_id: id, platform: "demo", labels: [], ...extra });

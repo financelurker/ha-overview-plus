@@ -4,14 +4,10 @@
 // ha-button are not defined, so the editor uses its plain HTML fallbacks.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Window } from "happy-dom";
+import { installDom } from "./dom.js";
 import { makeHass } from "./fixtures.js";
 
-const win = new Window({ url: "http://ha.local/" });
-for (const key of ["window", "document", "customElements", "HTMLElement", "CustomEvent", "Event"]) {
-  globalThis[key] = win[key];
-}
-win.customElements.define("ha-form", class extends win.HTMLElement {});
+const win = installDom({ stubs: ["ha-form"] });
 
 const { EDITOR_TAG } = await import("../src/editor/editor.js");
 
@@ -256,11 +252,13 @@ test("every field has a label and every option list is filled from the data", as
     ...fieldNames(ruleSchema({ hass, t: (k, p) => t(hass, k, p) }, opts, {})),
     "m_yaml", "e_yaml", "p_yaml",
   ].filter(Boolean);
-  for (const lang of ["en", "de"]) {
-    const h = { locale: { language: lang } };
-    const missing = all.filter((name) => t(h, `editor_${name}`) === `editor_${name}`);
-    assert.deepEqual(missing, [], `missing ${lang} labels`);
-  }
+  const missing = all.filter((name) => t({ locale: { language: "en" } }, `editor_${name}`) === `editor_${name}`);
+  assert.deepEqual(missing, [], "fields without a label");
+});
+
+test("German has a text for every English key, and no other keys", async () => {
+  const { STRINGS } = await import("../src/i18n.js");
+  assert.deepEqual(Object.keys(STRINGS.de).sort(), Object.keys(STRINGS.en).sort());
 });
 
 test("field types: required fields, device rules without 'adjust', no area fields in sections", async () => {
@@ -686,11 +684,19 @@ test("the tile block stays open when its fields change, and is forgotten with it
 });
 
 test("entity lists tolerate values that are not a list or contain nothing usable", () => {
-  for (const entities of ["sensor.pve_cpu", null, [null, 3, "sensor.pve_cpu"]]) {
+  const listOf = (entities) => {
     const { editor } = setup({ type: "custom:overview-plus", area_overrides: { proxmox: { tile: { entities } } } });
-    const list = entityList(areaPanel(editor, "Virtual › Proxmox"), "t_entities");
-    assert.ok(list === null || list.querySelector("ha-form.entity-add"), String(entities));
-  }
+    return entityList(areaPanel(editor, "Virtual › Proxmox"), "t_entities");
+  };
+  // a single entity id is a list of one
+  assert.deepEqual(listValues(listOf("sensor.pve_cpu")), ["sensor.pve_cpu"]);
+  // no entities: the tile shows the default values, there is no list
+  assert.equal(listOf(null), null);
+  // unusable entries do not break the list (they stay as empty rows); it can still be added to
+  const mixed = listOf([null, 3, "sensor.pve_cpu"]);
+  assert.ok(mixed.querySelector("ha-form.entity-add"));
+  assert.equal(listValues(mixed).length, 3);
+  assert.equal(listValues(mixed)[2], "sensor.pve_cpu");
 });
 
 test("Enter and Space on a header arrow move the entry instead of toggling the panel", () => {
