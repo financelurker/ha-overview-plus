@@ -48,3 +48,13 @@ test("the close button closes the list; other custom actions are ignored", () =>
   fire({ action: "fire-dom-event", [DEVICE_LIST_KEY]: { devices: [] } });
   assert.equal(dialogs().length, 0);
 });
+
+test("the dialog opens inside <home-assistant>, where cards get their data from", () => {
+  const shadow = ha.attachShadow({ mode: "open" });
+  fire({ action: "fire-dom-event", [DEVICE_LIST_KEY]: { title: "X", devices: [{ id: "dev_tv" }] } });
+  const host = shadow.querySelector("overview-plus-popup");
+  assert.ok(host, "in the shadow root of home-assistant");
+  assert.equal(dialogs().length, 0, "not in document.body");
+  host.shadowRoot.querySelector("button.close").dispatchEvent(new Event("click"));
+  assert.equal(shadow.querySelector("overview-plus-popup"), null);
+});

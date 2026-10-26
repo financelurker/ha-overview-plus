@@ -89,7 +89,10 @@ export function openDialog({ title, closeLabel, buttons = [], style = "", onClos
   dialog.addEventListener("click", (ev) => {
     if (ev.target === dialog) dismiss(); // click on the backdrop
   });
-  document.body.appendChild(host);
+  // Inside <home-assistant>: cards in the dialog ask it for data through context-request
+  // events (e.g. the state of a cover for tile features); from document.body nobody answers.
+  const ha = /** @type {any} */ (document.querySelector("home-assistant"));
+  (ha?.shadowRoot || document.body).appendChild(host);
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
   return { content, dismiss };
