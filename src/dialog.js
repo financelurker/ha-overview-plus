@@ -59,11 +59,17 @@ export function openDialog({ title, closeLabel, buttons = [], style = "", onClos
   const content = /** @type {HTMLElement} */ (root.querySelector(".content"));
 
   let closed = false;
+  // Home Assistant's own dialogs (e.g. more-info opened from a card in the popup) add a
+  // history entry and go back when they close: only a change of the page closes ours.
+  const path = window.location.pathname;
+  const onPop = () => {
+    if (window.location.pathname !== path) dismiss();
+  };
   const dismiss = () => {
     if (closed) return;
     closed = true;
     window.removeEventListener("location-changed", dismiss);
-    window.removeEventListener("popstate", dismiss);
+    window.removeEventListener("popstate", onPop);
     if (dialog.open) dialog.close();
     host.remove();
     onClose?.();
@@ -84,12 +90,15 @@ export function openDialog({ title, closeLabel, buttons = [], style = "", onClos
 
   // Navigating away (also the back button on phones) closes the dialog
   window.addEventListener("location-changed", dismiss);
-  window.addEventListener("popstate", dismiss);
+  window.addEventListener("popstate", onPop);
   dialog.addEventListener("close", dismiss); // Escape key
   dialog.addEventListener("click", (ev) => {
     if (ev.target === dialog) dismiss(); // click on the backdrop
   });
-  document.body.appendChild(host);
+  // Inside <home-assistant>: cards in the dialog ask it for data through context-request
+  // events (e.g. the state of a cover for tile features); from document.body nobody answers.
+  const ha = /** @type {any} */ (document.querySelector("home-assistant"));
+  (ha?.shadowRoot || document.body).appendChild(host);
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
   return { content, dismiss };
