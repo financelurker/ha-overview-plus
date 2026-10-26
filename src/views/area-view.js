@@ -26,6 +26,7 @@ import { summaryPage } from "../summary-pages.js";
 import { findEntities, simpleFilter, SUMMARY_FILTERS, SUMMARY_ICONS } from "../entity-filter.js";
 import { t } from "../i18n.js";
 import { matches } from "../matcher.js";
+import { asList, navigateAction, stateText } from "../util.js";
 import { areaEntities, deviceClass, deviceName, displayName, entityCategory, stripAreaName, supportsFeature } from "../registry.js";
 
 /** @typedef {import("../registry.js").EntityContext} EntityContext */
@@ -116,15 +117,12 @@ const headingCard = (heading, icon, extra = {}) => {
   return { ...card, ...extra };
 };
 
-/** @param {string} path */
-const navigate = (path) => ({ action: "navigate", navigation_path: path });
-
 /**
  * @param {any} hass
  * @param {any} device
  */
 const deviceTapAction = (hass, device) =>
-  hass.user?.is_admin && device ? navigate(`/config/devices/device/${device.id}`) : undefined;
+  hass.user?.is_admin && device ? navigateAction(`/config/devices/device/${device.id}`) : undefined;
 
 /** Standard categories that can be placed in the list of sections, in their default order. */
 export const DEFAULT_SECTIONS = ["light", "climate", "security", "media_players", "scenes"];
@@ -263,12 +261,6 @@ export function sortEntities(list, groups) {
  * @property {any} states                        hidden while the state is one of these
  */
 
-/** YAML 1.1 reads an unquoted off / on as false / true. @param {any} v */
-const stateText = (v) => (v === true ? "on" : v === false ? "off" : String(v));
-
-/** @param {any} v @returns {any[]} */
-const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === "" ? [] : [v]);
-
 /**
  * The hide rules of a section (`entities.hide_states`): a list of rules, or – short form –
  * a list of states for every entity.
@@ -389,19 +381,19 @@ export function generateAreaView(hass, areaId, options = {}) {
   const configured = Array.isArray(override?.sections) ? override.sections.filter((s) => s && typeof s === "object") : [];
   /** @type {OverrideSection[]} own sections (entries with `default` stand for a standard category) */
   const ownList = configured.filter((s) => !s.default);
-  const hasOverride = ownList.length > 0;
+  const hasOwnSections = ownList.length > 0;
   const withDefaults = override?.show_default_sections === true;
   const highlight = createCardFactory(options.card_rules, "area");
   const other = createCardFactory(options.card_rules, "area_other");
 
   /** @type {Record<string, any>} */
-  const report = { area: areaId, override: hasOverride, sections: [], hidden: [] };
+  const report = { area: areaId, override: hasOwnSections, sections: [], hidden: [] };
 
   const stripNames = options.strip_area_names !== false;
   /** @param {string} key */
   const pageAction = (key) => {
     const path = summaryPage(hass, options.summary_pages, key, true);
-    return path ? navigate(path) : undefined;
+    return path ? navigateAction(path) : undefined;
   };
   /**
    * @param {ReturnType<typeof createCardFactory>} factory
@@ -483,7 +475,7 @@ export function generateAreaView(hass, areaId, options = {}) {
   // ------------------------------------------------------ standard categories
   // Shown without own sections (the default view) or with show_default_sections. They take
   // what the own sections left; a hidden one takes nothing.
-  const showCategories = !hasOverride || withDefaults;
+  const showCategories = !hasOwnSections || withDefaults;
   if (showCategories) {
     // The first entry of a category counts, as for the order
     /** @type {Map<string, any>} */
@@ -554,7 +546,7 @@ export function generateAreaView(hass, areaId, options = {}) {
         type: "grid",
         cards: [
           headingCard(t(hass, "scenes"), SUMMARY_ICONS.scenes, {
-            tap_action: hass.user?.is_admin ? navigate("/config/scene/dashboard") : undefined,
+            tap_action: hass.user?.is_admin ? navigateAction("/config/scene/dashboard") : undefined,
           }),
           ...compact(scenes.map((ctx) => card(highlight, ctx))),
         ],
@@ -612,7 +604,7 @@ export function generateAreaView(hass, areaId, options = {}) {
       type: "grid",
       cards: [
         headingCard(t(hass, "automations"), SUMMARY_ICONS.automations, {
-          tap_action: hass.user?.is_admin ? navigate("/config/automation/dashboard") : undefined,
+          tap_action: hass.user?.is_admin ? navigateAction("/config/automation/dashboard") : undefined,
         }),
         ...compact(automations.map((ctx) => card(highlight, ctx))),
       ],
@@ -753,7 +745,7 @@ function buildOverrideSection(hass, section, shown, factory, card, compact, stri
     if (!primary) return [];
     const tile = card(factory, primary, {
       name: stripAreaName(deviceName(device), stripArea) || t(hass, "unnamed_device"),
-      ...(hass.user?.is_admin ? { tap_action: navigate(`/config/devices/device/${device.id}`) } : {}),
+      ...(hass.user?.is_admin ? { tap_action: navigateAction(`/config/devices/device/${device.id}`) } : {}),
     });
     if (!tile) return [];
     deciding.push(primary);

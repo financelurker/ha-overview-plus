@@ -24,7 +24,8 @@
  *        "icon" shows a colored icon on the tile (several at once).
  */
 
-import { deviceAreaId } from "./registry.js";
+import { deviceAreaId, domainOf } from "./registry.js";
+import { asList, stateText } from "./util.js";
 
 /**
  * @typedef {Object} IndicatorPreset
@@ -65,9 +66,6 @@ export const INDICATOR_PRESETS = {
   cleaning: { icon: "mdi:robot-vacuum", color: "green", style: "icon", domain: "vacuum", states: ["cleaning"] },
 };
 
-/** @param {any} v @returns {any[]} */
-const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === "" ? [] : [v]);
-
 /**
  * Theme color name → CSS color, as Home Assistant's computeCssColor does.
  * @param {string | undefined} color
@@ -90,9 +88,6 @@ export function entityAreaId(hass, entityId) {
   return device ? deviceAreaId(device, hass.devices || {}) : undefined;
 }
 
-/** YAML 1.1 reads an unquoted on / off as a boolean. @param {any} v */
-const stateText = (v) => (v === true ? "on" : v === false ? "off" : String(v));
-
 const warned = new Set();
 /** @param {string} preset */
 function warnUnknown(preset) {
@@ -113,10 +108,10 @@ export function resolveIndicator(config) {
     return undefined;
   }
   const merged = { ...(preset || {}), ...config };
-  const states = config.state !== undefined ? list(config.state) : list(merged.states);
+  const states = config.state !== undefined ? asList(config.state) : asList(merged.states);
   merged.states = (states.length ? states : ["on"]).map(stateText);
-  merged.device_classes = list(merged.device_classes).map(String);
-  merged.entity = list(merged.entity).filter((e) => typeof e === "string");
+  merged.device_classes = asList(merged.device_classes).map(String);
+  merged.entity = asList(merged.entity).filter((e) => typeof e === "string");
   merged.style = merged.style === "tile" ? "tile" : "icon";
   merged.icon = merged.icon || "mdi:circle-medium";
   merged.key = config.preset || config.name || merged.entity[0] || "custom";
@@ -134,7 +129,7 @@ export function resolveIndicator(config) {
  * @returns {{ indicator: any, config: any, candidates: string[] }[]}
  */
 export function prepareIndicators(hass, areaId, configs) {
-  const resolved = list(configs).map((config) => ({ config, indicator: resolveIndicator(config) })).filter((r) => r.indicator);
+  const resolved = asList(configs).map((config) => ({ config, indicator: resolveIndicator(config) })).filter((r) => r.indicator);
   if (!resolved.length) return [];
   // One pass over the registry for all domains the area search needs
   const domains = new Set(resolved.filter((r) => !r.indicator.entity.length && r.indicator.domain).map((r) => r.indicator.domain));
@@ -142,7 +137,7 @@ export function prepareIndicators(hass, areaId, configs) {
   const byDomain = {};
   if (domains.size) {
     for (const [id, entry] of Object.entries(hass.entities || {})) {
-      const domain = id.slice(0, id.indexOf("."));
+      const domain = domainOf(id);
       if (!domains.has(domain) || entry?.hidden || entry?.entity_category) continue;
       if (entityAreaId(hass, id) !== areaId) continue;
       (byDomain[domain] ||= []).push(id);

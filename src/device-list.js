@@ -31,7 +31,7 @@ const STYLE = `
 `;
 
 /** @param {string} path */
-function navigate(path) {
+function goTo(path) {
   history.pushState(null, "", path);
   window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
 }
@@ -67,7 +67,7 @@ export function openDeviceList(hass, list) {
     button.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${CHEVRON_PATH}"/></svg>`);
     button.addEventListener("click", () => {
       dismiss();
-      navigate(`/config/devices/device/${id}`);
+      goTo(`/config/devices/device/${id}`);
     });
     const li = document.createElement("li");
     li.append(button);

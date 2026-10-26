@@ -22,6 +22,7 @@ import { LAZY_TYPE, lazifyView } from "./lazy-card.js";
 import "./area-tile-card.js";
 import "./popup.js";
 import "./device-list.js";
+import { registryChanged } from "./util.js";
 
 export const VERSION = "0.0.0";
 
@@ -29,9 +30,6 @@ const LOG = "[overview-plus]";
 
 /** Keys the dashboard strategy handles itself; everything else is passed to the overview view strategy. */
 const OWN_KEYS = ["type", "card_rules", "area_overrides", "load_home_settings", "strip_area_names", "lazy_render", "debug", "summary_pages", "area_indicators"];
-
-/** @type {readonly string[]} */
-const REGISTRY_DEPS = ["entities", "devices", "areas", "floors", "labels", "panels"];
 
 /**
  * @param {string} title
@@ -100,9 +98,6 @@ function countCards() {
   if (root) walk(root);
   return n;
 }
-
-/** @param {any} oldHass @param {any} newHass */
-const registryChanged = (oldHass, newHass) => REGISTRY_DEPS.some((k) => oldHass[k] !== newHass[k]);
 
 class OverviewPlusDashboardStrategy {
   /**
