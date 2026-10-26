@@ -33,12 +33,11 @@ import { INDICATOR_PRESETS } from "../area-indicators.js";
 /** Keys of the strategy config managed by the form. */
 const MANAGED = ["load_home_settings", "strip_area_names", "lazy_render", "debug", "card_rules", "area_overrides", "summary_pages", "area_indicators", ...HOME_KEYS];
 
-/** Selection criteria editable as fields (all accept one or more values). */
+/** Selection criteria editable as fields (all accept one or more values); each can also be excluded (`not`). */
 export const MATCH_FIELDS = [
   "label", "integration", "domain", "device_class", "entity_category",
   "manufacturer", "model", "device", "device_name", "entity", "area", "floor",
 ];
-/** Every criterion can also be excluded. */
 const ENTITY_FILTER_FIELDS = ["include_domains", "exclude_domains", "include_categories", "exclude_device_classes", "exclude"];
 const CARD_FIELDS = ["name", "icon", "color"];
 

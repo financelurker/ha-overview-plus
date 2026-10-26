@@ -302,7 +302,7 @@ export async function generateOverviewView(hass, options = {}) {
       const prefs = await hass.callWS({ type: "energy/get_prefs" });
       hasEnergy = !!prefs?.energy_sources?.some((/** @type {any} */ s) => s.type === "grid" && !!s.stat_energy_from);
     } catch {
-      // No energy preferences (e.g. not allowed for this user): no energy summary
+      // Energy preferences not available: no energy summary
     }
   }
 

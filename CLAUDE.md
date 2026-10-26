@@ -21,7 +21,7 @@ These rules apply to every Claude session working on this repository.
 `overview-plus` is a custom Lovelace **dashboard strategy** (`type: custom:overview-plus`) for Home Assistant
 2026.10+. It rebuilds the built-in Overview dashboard (`home` strategy) – overview page, area views, media
 players and devices views – from the registry data in `hass`; it does **not** wrap or patch the built-in
-strategies. On top it adds own overview page settings and summary pages, area states on the area tiles,
+strategies, so every card is correct on the first render. On top it adds own overview page settings and summary pages, area states on the area tiles,
 per-area layouts (`area_overrides`) and card rules with tap popups (`card_rules`), all set up in its visual
 editor (`src/editor/`).
 
