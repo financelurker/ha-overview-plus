@@ -21,7 +21,7 @@ itself: new devices and areas appear without editing the dashboard.
 
 - **[Overview page](https://github.com/financelurker/ha-overview-plus/blob/main/docs/overview-page.md):**
   favorites, summaries, shortcuts and alerts of the built-in Overview, or own ones per dashboard; the
-  summaries lead to [pages of your choice](https://github.com/financelurker/ha-overview-plus/blob/main/docs/overview-page.md#pages-of-the-summaries).
+  summaries lead to [pages of your choice](https://github.com/financelurker/ha-overview-plus/blob/main/docs/overview-page.md).
 - **[Area states](https://github.com/financelurker/ha-overview-plus/blob/main/docs/area-states.md):**
   see at a glance which rooms are occupied, heated, lit or have a window open – tinted tiles and colored
   chips, also for states of your own (e.g. the washing machine runs).
@@ -37,7 +37,7 @@ itself: new devices and areas appear without editing the dashboard.
 - **[Popup on tap](https://github.com/financelurker/ha-overview-plus/blob/main/docs/card-rules.md#popup-on-tap):**
   a card of your choice instead of the entity's info dialog.
 - **[Visual editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md):**
-  set it up in the dashboard's editor, with dropdowns filled from your installation.
+  everything is set up in the dashboard's editor, with dropdowns filled from your installation.
 
 **A normal room keeps its default sections and gains one of its own:** all power plugs of the living
 room in one section, selected by label.
@@ -97,30 +97,22 @@ as type *Dashboard*.
    Do not click **Take control** there: it turns the dashboard into a static copy that Overview Plus no
    longer updates.
 
-In YAML, the dashboard is:
-
-```yaml
-strategy:
-  type: custom:overview-plus
-```
-
 ## Documentation
 
 | Page | Content |
 |---|---|
-| [Overview page](https://github.com/financelurker/ha-overview-plus/blob/main/docs/overview-page.md) | own or built-in settings, favorites, summaries and shortcuts, pages of the summaries |
-| [Area states](https://github.com/financelurker/ha-overview-plus/blob/main/docs/area-states.md) | presets, tinted tile or chip, own states |
-| [Area layouts](https://github.com/financelurker/ha-overview-plus/blob/main/docs/area-layouts.md) | own sections, default sections, layouts, hide while in state, order, the area's tile |
-| [Card rules](https://github.com/financelurker/ha-overview-plus/blob/main/docs/card-rules.md) | replace, adjust or hide cards, contexts, device cards, popup on tap |
-| [Editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md) | the three parts of the editor, what stays YAML |
-| [Reference](https://github.com/financelurker/ha-overview-plus/blob/main/docs/reference.md) | all options, match specifications |
+| [Overview page](https://github.com/financelurker/ha-overview-plus/blob/main/docs/overview-page.md) | built-in or own settings, pages of the summaries, shortcuts |
+| [Area states](https://github.com/financelurker/ha-overview-plus/blob/main/docs/area-states.md) | the states, tinted tile or chip, own states |
+| [Area layouts](https://github.com/financelurker/ha-overview-plus/blob/main/docs/area-layouts.md) | own and default sections, section heading, layouts, hide while in state, order, the area's tile |
+| [Card rules](https://github.com/financelurker/ha-overview-plus/blob/main/docs/card-rules.md) | replace, adjust or hide cards, one card per device, popup on tap |
+| [Editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md) | how to set everything up, with the YAML of each part and the selection criteria |
 
 ## Support
 
 Questions, bugs and ideas: [GitHub issues](https://github.com/financelurker/ha-overview-plus/issues). For a bug,
 please add the Home Assistant and Overview Plus versions, the dashboard's YAML and the messages of the
-browser console that start with `[overview-plus]` (with `debug: true`, Overview Plus logs the generated
-area views too).
+browser console that start with `[overview-plus]` (with *Debug output in the browser console* under *General* in
+the editor, Overview Plus logs the generated views too).
 
 ## License
 
