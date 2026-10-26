@@ -124,7 +124,6 @@ area views too).
 
 ## License
 
-Apache License 2.0, see [LICENSE](https://github.com/financelurker/ha-overview-plus/blob/main/LICENSE) and
-[NOTICE](https://github.com/financelurker/ha-overview-plus/blob/main/NOTICE).
+Apache License 2.0, see [LICENSE](https://github.com/financelurker/ha-overview-plus/blob/main/LICENSE).
 
 This project is not affiliated with Home Assistant or the Open Home Foundation.
