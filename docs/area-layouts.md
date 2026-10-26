@@ -33,8 +33,9 @@ Set up in the editor: [Area layouts](editor.md#area-layouts) · [Sections](edito
 - A section selects entities by label, integration, device and [more](editor.md#selection-criteria).
 - Own sections come first, in their order, followed by the remaining devices of the area and its
   automations, as in the default view.
-- **Default sections** – lights, climate, security, media players and scenes – are left out, unless they
-  are switched on. Then they come first; each can also be moved between the own sections.
+- As soon as an area has own sections, the **default sections** – lights, climate, security, media
+  players and scenes – are left out, unless they are switched on. Then they come first; each can also be
+  moved between the own sections.
 - Any section, own or default, can be **hidden**: it shows nothing and selects nothing; its entities
   appear with the remaining devices.
 - An **entity** is shown only once, in the first section that selects it. Own sections select first, the

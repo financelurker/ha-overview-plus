@@ -20,7 +20,7 @@ climate tile of the default area view with a thermostat card:
 - Rules are checked in order and **all** matching rules apply, so a general rule can be refined by a later
   one for a single entity. A rule can stop the evaluation for its entities.
 - **One card per device:** all entities of a matching device become one card, e.g. an entities card per
-  virtual machine.
+  virtual machine. Here the first matching rule counts.
 - A rule can be limited to some places: favorites, the highlighted sections or the remaining devices of
   area views, the media players view or the devices view. In the devices view every device is one entities
   card: device rules replace it, entity rules can only hide rows.

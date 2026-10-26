@@ -111,8 +111,8 @@ as type *Dashboard*.
 
 Questions, bugs and ideas: [GitHub issues](https://github.com/financelurker/ha-overview-plus/issues). For a bug,
 please add the Home Assistant and Overview Plus versions, the dashboard's YAML and the messages of the
-browser console that start with `[overview-plus]` (with `debug: true`, Overview Plus logs the generated
-area views too).
+browser console that start with `[overview-plus]` (with *Debug output in the browser console* under *General* in
+the editor, Overview Plus logs the generated views too).
 
 ## License
 

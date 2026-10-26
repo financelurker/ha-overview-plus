@@ -14,10 +14,11 @@ parts – *Overview page*, *Area layouts* and *General*. Each part shows a short
 
 - Integration, domain, device class, manufacturer and model are dropdowns filled from your own
   installation; own values can be typed.
-- Lists are ordered with the ↑/↓ buttons.
-- Only two things are YAML in the form: the options specific to a replacement or popup card (every card
-  type has different ones), and – only if your configuration contains one – a selection the form cannot
-  show, such as an either/or list.
+- Lists are ordered with the ↑/↓ buttons; list entries with a switch can be hidden.
+- The form covers everything except the options specific to a replacement or popup card (every card type
+  has different ones) and own area states. A selection, entity filter or primary entity the form cannot
+  show (e.g. an either/or list) appears as YAML in its place. The few options that exist only in YAML are
+  in the YAML blocks below.
 - The editor's ⋮ menu switches to the YAML of the whole dashboard; each part below shows its YAML.
   Do not click **Take control** there: it turns the dashboard into a static copy that Overview Plus no
   longer updates.
@@ -35,9 +36,8 @@ What it shows: [Overview page](overview-page.md).
   Overview and are changed there (open it and click the pencil). *Own settings for this dashboard* gives
   this dashboard its own; switching copies the current ones of the built-in Overview as a starting point,
   *Copy from the built-in Overview* does it again later.
-- **Welcome message** and **Suggested entities**: on or off.
-- **Favorite entities:** add with *Add entity*, order with ↑/↓.
-- **Alert entities:** shown as an alert at the top of the page while active.
+- With own settings: **Welcome message**, **Favorite entities**, **Suggested entities** and **Alert
+  entities** (shown as an alert at the top of the page while active).
 
 <table>
 <tr>
@@ -57,7 +57,7 @@ strategy:
   hide_welcome_message: true
   hide_suggested_entities: true
   alert_entities:
-    - { entity: binary_sensor.front_door, severity: alert }   # severity: alert | warning
+    - { entity: binary_sensor.front_door, severity: alert }   # YAML only: severity alert | warning
 ```
 
 With `load_home_settings: true` these options are ignored.
@@ -68,13 +68,13 @@ With `load_home_settings: true` these options are ignored.
 
 *Overview page → Summaries and shortcuts*:
 
-- Order the summaries with ↑/↓, show or hide them with the switch.
-- Expand a summary to choose the **page** it leads to; empty is Home Assistant's own page. The category
-  headings of the area views lead there too.
+- Order of the summaries, and which are shown.
+- Expand a summary to choose the **page** it leads to; empty is Home Assistant's own page (media players:
+  the media players view of Overview Plus). The category headings of the area views lead there too.
 - **Add shortcut:** a tile leading to any page, with navigation path, label, icon and color.
 
-With *Same as the built-in Overview*, order and visibility come from the built-in Overview; the list then
-only offers the pages.
+With *Same as the built-in Overview*, order and visibility come from the built-in Overview; the part is
+then called *Pages of the summaries* and only offers the pages.
 
 <table>
 <tr>
@@ -106,10 +106,10 @@ only offers the pages.
 
 What they show: [Area states](area-states.md). *Overview page → Area states*:
 
-- Switch the states you want on. The order (↑/↓) is the importance.
+- Switch the states you want on; the order is the importance.
 - Expand a state to choose **Show as** (*Tinted tile* or *Chip above the room icon*), **Icon** and **Color**.
-- Own states are set in YAML; the editor then lists them with the others, so they can be moved, switched
-  off or deleted there.
+- Own states are set in YAML; the editor then lists them with the others, so they can be moved or
+  deleted there.
 
 <table>
 <tr>
@@ -127,8 +127,8 @@ What they show: [Area states](area-states.md). *Overview page → Area states*:
     - preset: heating
     - preset: window_open
       color: red                       # override icon, color or style (tile | icon)
-    - preset: lights_on
-      entity: light.office_desk        # only these entities instead of searching the area
+    - preset: occupied
+      entity: binary_sensor.office_presence   # YAML only: these entities instead of searching the area
     - name: Washing                    # own state
       entity: sensor.washing_machine
       state: running                   # default on; several: [heat, boost]
@@ -153,7 +153,7 @@ What they do: [Area layouts](area-layouts.md). *Area layouts → Add area* gives
   Overview; they then appear in the list of sections, where they can be moved or hidden.
 - **Show remaining devices** and **Show automations**.
 - **[Tile on the overview page](#tile-on-the-overview-page)**.
-- The **[sections](#sections)**: order with ↑/↓, show or hide with the switch, *Add section*.
+- The **[sections](#sections)** and *Add section*.
 
 <table>
 <tr>
@@ -187,14 +187,14 @@ What they do: [Area layouts](area-layouts.md). *Area layouts → Add area* gives
 
 Expand a section in *Area layouts*:
 
-- **Title**, **Icon** and **Layout**: *Tiles*, *Grouped by device*, *Compact* or *Table* ([what they look
-  like](area-layouts.md#layouts)).
+- **Title**, **Icon** and **Layout**: *Tiles (one per entity)*, *Grouped by device*, *Compact (one tile per
+  device)* or *Table (one list per device)* ([what they look like](area-layouts.md#layouts)).
 - **Label:** devices or entities with one of these labels.
 - **Refine selection:** more [selection criteria](#selection-criteria) – integration, domain, device class,
   entity category, manufacturer, model, device name, devices, entities – and under *Exclude* the same to
   leave out.
-- **Entity filter:** only these domains, not these domains, entity categories shown (empty: regular and
-  diagnostic), not these device classes, not these entities.
+- **Entity filter:** *Only these domains*, *Not these domains*, *Entity categories shown* (empty: regular
+  and diagnostic), *Not these device classes*, *Not these entities*.
 - **Primary entity** (*Compact* only): domain and device class of the entity a device's tile shows;
   empty: chosen automatically.
 - **Hide while in state:** conditions of domains (empty: all), device classes (optional) and the states
@@ -233,8 +233,9 @@ Expand a section in *Area layouts*:
             - sensor                     # a plain string is a domain
 ```
 
-`match` uses the [selection criteria](#selection-criteria). `hide_states` can also be a plain list of
-states for every entity of the section.
+`match` and `primary` use the [selection criteria](#selection-criteria). `hide_states` can also be a plain
+list of states for every entity of the section. Without `show_default_sections`, `default` entries are
+ignored.
 
 </details>
 
@@ -242,9 +243,9 @@ states for every entity of the section.
 
 *Area layouts → (area) → Tile on the overview page*:
 
-- **Name** and **Color** of the tile.
+- **Name**, **Color**.
 - **Values shown:** *Default* (the temperature, if the area has one), *Selected sensor classes* (the area's
-  sensors of these device classes, combined like the area card does) or *Selected entities* (their states
+  sensors of these device classes, combined into one value each) or *Selected entities* (their states
   in this order, also diagnostic sensors), optionally with **Show entity names**.
 - **Alert icons:** an icon while a binary sensor of the area with one of these device classes is on.
 - **Alert entities:** an icon while one of these binary sensors is on.
@@ -261,13 +262,16 @@ states for every entity of the section.
 
 ```yaml
     server:
-      tile:                            # any option of the area card can be used too
+      tile:
         color: blue
         entities: [sensor.server_cpu_load, sensor.server_memory_used]   # or sensor_classes: [temperature]
-        show_names: false
+        show_names: true               # "CPU 12 % · RAM 41 %"
         alert_classes: [problem]
         alert_entities: [binary_sensor.server_problem]
 ```
+
+Any option of the area card can be used too (YAML only). A tile with `display_type: picture` / `camera`
+or `features` stays an area card – without area states.
 
 An area can have a `tile` without `sections` – its area view then stays the default.
 
@@ -319,10 +323,10 @@ and checked in this order. A rule has:
       stop: true                                                     # Stop here
 ```
 
-- `contexts`: `favorites`, `area`, `area_other`, `media`, `devices`.
+- `contexts`: `favorites` (also suggested entities), `area`, `area_other`, `media`, `devices`.
 - `entity` is set automatically unless the card uses `$entity`; `$entities` is the list of entity ids of
   a device (`scope: device`). The same holds for the popup card.
-- `tap: false` removes a popup of an earlier rule.
+- `tap: false` (YAML only) removes a popup of an earlier rule.
 
 </details>
 
@@ -343,25 +347,27 @@ and checked in this order. A rule has:
 | Render cards when they scroll into view | `lazy_render` | `true` |
 | Debug output in the browser console | `debug` | `false` |
 
-- `strip_area_names`: "Living room Ceiling light" → "Ceiling light", in area views and the media players view.
+- `strip_area_names`: "Living room Ceiling light" → "Ceiling light", in card names and device headings of
+  area views and the media players view.
 - `lazy_render`: cards below the first screen of a view are rendered just before they become visible.
 - `debug`: logs the generated views (and the section assignment of area views).
 
 ## Selection criteria
 
 *Label*, *Refine selection* and *Applies to* select entities by these criteria. In YAML they form a `match`:
-all criteria in one object must match (AND), a list of objects matches if any object matches (OR) –
-such a list is shown as YAML in the editor. Every criterion takes one value or a list.
+all criteria in one object must match (AND), a list of objects matches if any object matches (OR). Such
+a list, or a criterion without a field, is shown as YAML in the editor. Every criterion takes one value or
+a list.
 
 | Editor | YAML | Matches |
 |---|---|---|
-| Label | `label` | label on the entity **or** its device (`entity_label` / `device_label`: only there) |
+| Label | `label` | label id on the entity **or** its device (YAML only: `entity_label` / `device_label`) |
 | Integration | `integration` | integration of the entity, e.g. `better_thermostat`, `mqtt` |
 | Domain | `domain` | e.g. `climate`, `sensor` |
 | Device class | `device_class` | `none` if unset |
 | Entity category | `entity_category` | `none`, `config`, `diagnostic` |
-| Manufacturer / Model | `manufacturer` / `model` | picked from the list: exact; own text: part of the name (regular expression) |
-| Device name contains | `device_name` | regular expression, e.g. `^pve` |
+| Manufacturer / Model | `manufacturer` / `model` | picked from the list: exact; own text: part of the name (regular expression); ignoring case |
+| Device name contains | `device_name` | regular expression, ignoring case, e.g. `^pve` |
 | Devices / Entities | `device` / `entity` | device ids / entity ids |
 | Areas / Floors | `area` / `floor` | area ids / floor ids |
 | Exclude | `not` | the same criteria, must not match, e.g. `not: { entity_category: diagnostic }` |
