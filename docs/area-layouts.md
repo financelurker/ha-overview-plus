@@ -54,12 +54,12 @@ automations, as in the default view. `match` selects entities with the
 
 The standard categories (lights, climate, security, media players, scenes) are left out – unless
 `show_default_sections: true` is set. This way an area like *Server* shows only its own sections,
-while a *Kitchen* keeps the default view and gains e.g. a *Comfort* section:
+while a *Living room* keeps the default view and gains e.g. a section with all its power plugs:
 
 <table>
 <tr>
-<td width="50%"><img src="images/area-default-sections-light.png" alt="Default sections and an own section, light theme"></td>
-<td width="50%"><img src="images/area-default-sections-dark.png" alt="Default sections and an own section, dark theme"></td>
+<td width="50%"><img src="images/area-plugs-light.png" alt="Default sections and an own section, light theme"></td>
+<td width="50%"><img src="images/area-plugs-dark.png" alt="Default sections and an own section, dark theme"></td>
 </tr>
 </table>
 
@@ -67,12 +67,13 @@ while a *Kitchen* keeps the default view and gains e.g. a *Comfort* section:
       show_default_sections: true
       sections:
         - default: light               # light, climate, security, media_players, scenes
-        - title: Comfort
-          icon: mdi:sofa-outline
-          match: { label: comfort }
+        - default: climate
+        - title: Power plugs
+          icon: mdi:power-socket-eu
+          match: { label: power_plug }
 ```
 
-- Standard categories the list does not name come first (here *Climate*). Without
+- Standard categories the list does not name come first. Without
   `show_default_sections` the `default` entries are ignored (the editor removes them when the option is
   switched off).
 - Any section, own or default, can be hidden with `hidden: true` (e.g. `- { default: scenes, hidden: true }`).
