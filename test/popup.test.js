@@ -97,6 +97,32 @@ test("more-info from a card with a popup opens the popup instead", async () => {
   assert.equal(reachedHa, 2);
 });
 
+test("the popup opens inside <home-assistant>; its cards' events reach it; only a page change closes it", async () => {
+  const ha = document.querySelector("home-assistant");
+  const shadow = ha.shadowRoot ?? ha.attachShadow({ mode: "open" });
+  for (const old of document.querySelectorAll("overview-plus-popup")) old.remove();
+  const withPopup = document.createElement("div");
+  withPopup.config = { type: "tile", entity: "climate.living", [POPUP_KEY]: { popup: { type: "thermostat" } } };
+  ha.appendChild(withPopup);
+  withPopup.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: "climate.living" }, bubbles: true, composed: true }));
+  await new Promise((r) => setTimeout(r, 10));
+  const popup = shadow.querySelector("overview-plus-popup");
+  assert.ok(popup, "in the shadow root of home-assistant");
+
+  // a card inside the popup asks home-assistant (e.g. context-request, more-info)
+  let reached = 0;
+  ha.addEventListener("context-request", () => reached++);
+  popup.shadowRoot.querySelector(".content").firstElementChild.dispatchEvent(new CustomEvent("context-request", { bubbles: true, composed: true }));
+  assert.equal(reached, 1);
+
+  // a dialog of Home Assistant going back in history keeps the popup
+  window.dispatchEvent(new win.PopStateEvent("popstate"));
+  assert.ok(shadow.querySelector("overview-plus-popup"), "same page: stays open");
+  window.history.pushState(null, "", "/other");
+  window.dispatchEvent(new win.PopStateEvent("popstate"));
+  assert.equal(shadow.querySelector("overview-plus-popup"), null, "page changed: closed");
+});
+
 test("the popup is found on the lazy wrapper too", () => {
   const inner = document.createElement("div");
   const lazy = document.createElement("div");

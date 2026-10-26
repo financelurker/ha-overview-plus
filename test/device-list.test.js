@@ -49,6 +49,7 @@ test("the close button closes the list; other custom actions are ignored", () =>
   assert.equal(dialogs().length, 0);
 });
 
+// Runs last: it gives the shared <home-assistant> a shadow root.
 test("the dialog opens inside <home-assistant>, where cards get their data from", () => {
   const shadow = ha.attachShadow({ mode: "open" });
   fire({ action: "fire-dom-event", [DEVICE_LIST_KEY]: { title: "X", devices: [{ id: "dev_tv" }] } });
