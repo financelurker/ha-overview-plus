@@ -39,10 +39,22 @@ itself: new devices and areas appear without editing the dashboard.
 - **[Visual editor](https://github.com/financelurker/ha-overview-plus/blob/main/docs/editor.md):**
   set it up in the dashboard's editor, with dropdowns filled from your installation.
 
+**A normal room keeps its default sections and gains one of its own:** all power plugs of the living
+room in one section, selected by label.
+
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections-light.png?v=035a4c4774" alt="Area view with own sections, light theme"></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections-dark.png?v=8c18ed69f4" alt="Area view with own sections, dark theme"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-plugs-light.png?v=ae630c34f2" alt="Living room with the default sections and a power plugs section, light theme"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-plugs-dark.png?v=63308039bd" alt="Living room with the default sections and a power plugs section, dark theme"></td>
+</tr>
+</table>
+
+**A server room shows only its own sections:** host and virtual machines, selected by label.
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections-light.png?v=035a4c4774" alt="Area view with own sections only, light theme"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/financelurker/ha-overview-plus/main/docs/images/area-sections-dark.png?v=8c18ed69f4" alt="Area view with own sections only, dark theme"></td>
 </tr>
 </table>
 
