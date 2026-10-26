@@ -3,84 +3,43 @@
 [← Back to the overview](../README.md)
 
 Every area has a view, by default with the same structure as in the built-in Overview. An area can get
-its own layout: its own sections, badges and tile on the overview page. In the editor: *Area layouts →
-Add area*; *Remove area layout* returns it to the default view.
+its own layout: its own sections, badges and tile on the overview page.
 
-**Example:** *Host* and *Virtual machines* are selected by label, and the area name is removed from the
-card names ("Server CPU load" → "CPU load"). [Card rules](card-rules.md) set the CPU and memory icons.
-
-<table>
-<tr>
-<td width="50%"><img src="images/area-sections-light.png" alt="Area view with own sections, light theme"></td>
-<td width="50%"><img src="images/area-sections-dark.png" alt="Area view with own sections, dark theme"></td>
-</tr>
-</table>
-
-```yaml
-strategy:
-  type: custom:overview-plus
-  area_overrides:
-    server:                          # area id
-      badges: [binary_sensor.server_problem]   # false = none; default: area temperature/humidity
-      sections:
-        - title: Host
-          icon: mdi:server
-          match: { label: host }
-        - title: Virtual machines
-          icon: mdi:cube-outline
-          match: { label: vm }
-      show_default_sections: false   # default
-      show_other_devices: true       # default
-      show_automations: true         # default
-```
-
-The configured sections are shown in order, followed by all remaining devices of the area and its
-automations, as in the default view. `match` selects entities with the
-[match syntax](reference.md#match-specifications).
-
-<details>
-<summary>Screenshot: an area layout in the editor</summary>
+A normal room keeps its default sections and gains one of its own – here all power plugs of the living
+room, selected by label:
 
 <table>
 <tr>
-<td width="50%"><img src="images/editor-area-light.png" alt="Editor: area layout with sections, light theme"></td>
-<td width="50%"><img src="images/editor-area-dark.png" alt="Editor: area layout with sections, dark theme"></td>
+<td width="50%"><img src="images/area-plugs-light.png" alt="Living room with the default sections and a power plugs section, light theme"></td>
+<td width="50%"><img src="images/area-plugs-dark.png" alt="Living room with the default sections and a power plugs section, dark theme"></td>
 </tr>
 </table>
 
-</details>
-
-## With the default sections
-
-The standard categories (lights, climate, security, media players, scenes) are left out – unless
-`show_default_sections: true` is set. This way an area like *Server* shows only its own sections,
-while a *Living room* keeps the default view and gains e.g. a section with all its power plugs:
+A server room shows only its own sections – host and virtual machines, selected by label; the area name
+is removed from the card names ("Server CPU load" → "CPU load"):
 
 <table>
 <tr>
-<td width="50%"><img src="images/area-plugs-light.png" alt="Default sections and an own section, light theme"></td>
-<td width="50%"><img src="images/area-plugs-dark.png" alt="Default sections and an own section, dark theme"></td>
+<td width="50%"><img src="images/area-sections-light.png" alt="Area view with own sections only, light theme"></td>
+<td width="50%"><img src="images/area-sections-dark.png" alt="Area view with own sections only, dark theme"></td>
 </tr>
 </table>
 
-```yaml
-      show_default_sections: true
-      sections:
-        - title: Power plugs
-          icon: mdi:power-socket-eu
-          match: { label: power_plug }
-```
+Set up in the editor: [Area layouts](editor.md#area-layouts) · [Sections](editor.md#sections) ·
+[Tile on the overview page](editor.md#tile-on-the-overview-page).
 
-- The standard categories come first. A `- default: <category>` entry (`light`, `climate`,
-  `security`, `media_players`, `scenes`) places that category in the list instead. Without
-  `show_default_sections` the `default` entries are ignored (the editor removes them when the option is
-  switched off).
-- Any section, own or default, can be hidden with `hidden: true` (e.g. `- { default: scenes, hidden: true }`).
-  A hidden section shows nothing and selects nothing: its entities appear with the remaining devices.
-- An **entity** is shown only once, in the first section that selects it (`match` and `entities`).
-  The configured sections select first, the standard categories take what is left. Other entities of
-  the same device are not taken along: they can be selected by a later section, or appear in the
-  device's card below, as in the built-in area view.
+## Sections
+
+- A section selects entities by label, integration, device and [more](editor.md#selection-criteria).
+- Own sections come first, in their order, followed by the remaining devices of the area and its
+  automations, as in the default view.
+- **Default sections** – lights, climate, security, media players and scenes – are left out, unless they
+  are switched on. Then they come first; each can also be moved between the own sections.
+- Any section, own or default, can be **hidden**: it shows nothing and selects nothing; its entities
+  appear with the remaining devices.
+- An **entity** is shown only once, in the first section that selects it. Own sections select first, the
+  default sections take what is left. Other entities of the same device are not taken along: they can be
+  selected by a later section, or appear in the device's card below, as in the built-in area view.
 
 ## Section heading
 
@@ -97,82 +56,30 @@ administrators; for other users the heading has no action.
 
 ## Layouts
 
-- `tiles` (default): one tile per entity.
-- `devices`: a heading per device with its entities.
-- `compact`: one tile per device showing its primary entity, named after the device, opening the
-  device page. The primary entity is chosen by `primary` ([match spec](reference.md#match-specifications))
-  or automatically (running/connectivity/power sensor, switch, binary sensor, sensor), e.g.
-  `primary: { domain: binary_sensor, device_class: running }`.
-- `table`: one entities card per device.
+- **Tiles:** one tile per entity.
+- **Grouped by device:** a heading per device with its entities.
+- **Compact:** one tile per device showing its primary entity, named after the device, opening the device
+  page. The primary entity is chosen in the section or automatically (running, connectivity or power
+  sensor, switch, binary sensor, sensor).
+- **Table:** one list per device.
 
-## Which entities
+## Hide while in state
 
-`entities` narrows which matched entities are shown: `include_domains`, `exclude_domains`,
-`include_categories` (default `[none, diagnostic]`, i.e. configuration entities are hidden),
-`exclude_device_classes`, `exclude` (entity ids).
-
-### Hide while in state
-
-`entities.hide_states` hides a card **while** its entity is in one of the states (live, no reload); a
-heading with nothing left to show disappears too. `domain` and `device_class` are optional (one value
-or a list); a plain list of states applies to every entity of the section:
-
-```yaml
-          entities:
-            hide_states:
-              - { domain: binary_sensor, device_class: occupancy, states: [off] }   # "Clear"
-              - { domain: media_player, states: [off, standby] }
-```
-
-The states are the ones Home Assistant stores (`off`), not the translated text (*Clear*).
+A card of a section is hidden **while** its entity is in one of the chosen states, e.g. occupancy sensors
+while *Clear* or media players while off. This happens live, without reloading; a heading with nothing
+left to show disappears too.
 
 ## Order
 
-`sort` orders the entities of a section group by group – each in the first group it fits, the rest after
-them; without `sort`, and within a group, Home Assistant's order applies as in the built-in Overview. A
-group has a `domain`, a `device_class` or both (one value or a list); a plain string is a domain. In
-the `devices` and `table` layouts, devices keep their order and `sort` applies within each device;
-`compact` ignores it:
-
-```yaml
-          sort:
-            - { domain: binary_sensor, device_class: occupancy }
-            - { domain: [switch, light] }
-```
-
-<details>
-<summary>Screenshot: hide while in state and order in the editor</summary>
-
-<table>
-<tr>
-<td width="50%"><img src="images/editor-section-extras-light.png" alt="Editor: hide while in state and order, light theme"></td>
-<td width="50%"><img src="images/editor-section-extras-dark.png" alt="Editor: hide while in state and order, dark theme"></td>
-</tr>
-</table>
-
-</details>
+The entities of a section are shown group by group, e.g. first occupancy sensors, then switches and
+lights – each in the first group it fits, the rest after them. Without groups, and within a group, Home
+Assistant's order applies, as in the built-in Overview. In the layouts *Grouped by device* and *Table*,
+devices keep their order and the groups apply within each device; *Compact* ignores them.
 
 ## Tile on the overview page
 
-`tile` options are merged into the area card on the overview page; any option of the area card can be
-used. An area can have a `tile` without `sections` – its area view then stays the default.
-
-```yaml
-      tile:
-        sensor_classes: []           # default: [temperature] if the area has a temperature sensor
-        alert_classes: [problem]
-        color: blue
-```
-
-The area card can only show values combined by device class (e.g. the median temperature of the area).
-To show specific entities instead – also diagnostic sensors and sensors without device class – list them
-under `tile.entities`; the tile then uses Overview Plus' own area tile, which looks like the compact area
-card:
-
-```yaml
-      tile:
-        entities: [sensor.server_cpu_load, sensor.server_memory_used]   # shown in this order: "23% · 61%"
-        show_names: true                                 # with the entity names
-        alert_entities: [binary_sensor.server_problem]   # badge while one of them is on
-        alert_classes: [problem]
-```
+An area's tile on the overview page can show other values than the temperature: the area's sensors of
+chosen device classes (combined, as the area card does), or specific entities in a fixed order – also
+diagnostic sensors and sensors without device class, e.g. CPU and memory of a server. Alert icons show
+while a binary sensor of the area (or a chosen one) is on. An area can have its own tile and keep the
+default view.
